@@ -9,7 +9,7 @@ Lightweight idea, feedback, and fix tracking for any project. Markdown-native, m
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL%20v3-3b9eff?style=flat-square)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3b9eff?style=flat-square)](https://www.python.org/)
 [![Local-first](https://img.shields.io/badge/local--first-no%20account-6bcb77?style=flat-square)](#security)
-[![Release](https://img.shields.io/badge/release-v1.4.0-6bcb77?style=flat-square)](CHANGELOG.md)
+[![Release](https://img.shields.io/badge/release-v1.5.0-6bcb77?style=flat-square)](CHANGELOG.md)
 
 </div>
 

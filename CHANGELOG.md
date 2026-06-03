@@ -7,6 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.5.0] - 2026-06-03
+
+### Added
+
+- Code syntax highlighting in entry bodies. Fenced code blocks are highlighted
+  with highlight.js (loaded from CDN, no build step); the fence info-string
+  (e.g. ` ```python `) sets the language, otherwise it is auto-detected. Colors
+  come from new `--code-*` theme variables that reference each theme's existing
+  palette, so highlighting adapts to the active theme and `style.css` keeps its
+  zero-hardcoded-color rule.
+- Attachments. Screenshots and files can be attached to an entry by pasting,
+  drag-and-drop, or a file picker in both the log form and the inline edit form.
+  Files are stored in `.entrybox/attachments/` and referenced from the entry
+  body as standard markdown (`![name](attachments/…)` for images,
+  `[name](attachments/…)` for other files), so the entry stays plain readable
+  markdown and an AI agent can open the artifact directly. Image refs render
+  inline; deleting an entry reaps its attachments. The attachments directory is
+  git-ignored by default (debug context that stays on the machine).
+- Undo-after-log. After logging an entry a transient "✓ logged ID · undo"
+  control appears for 8 seconds; undo removes the just-created entry and
+  restores its title, body, and type to the log form — the fix for accidental
+  early submits.
+- Sandboxed project file surface: `GET /api/projects/{id}/file` (preview /
+  attachment serving), `GET /api/projects/{id}/tree` (directory tree, skipping
+  VCS/dependency/dot directories), and `POST /api/projects/{id}/attachments`
+  (base64 JSON upload — no new server dependency). All resolve paths through a
+  single sandbox (`app/files.py`) that rejects `..`, absolute, drive-qualified,
+  and symlink escapes.
+- `ENTRYBOX_TOKEN` environment variable. When set, the file/tree/attachment
+  routes require a matching `X-EntryBox-Token` header (recommended if you bind
+  off-loopback).
+- Test suite (`tests/`, stdlib `unittest`, no dependency): 23 cases covering the
+  markdown parser (all header formats, the date-only regression, round-trip
+  idempotence, edit isolation, duplicate-ID repair) and the path sandbox
+  (escape attempts, ignore rules).
+
+### Changed
+
+- `/health` now reports the real application version from a single source
+  (`app/__init__.py`) instead of a hardcoded `1.0.0`.
+- CORS is locked to loopback and browser-extension origins (was `allow_origins
+  ["*"]`). A website you visit can no longer read responses from
+  `localhost:3859` — important now that file-read routes exist. Requests with no
+  Origin (CLI, Quick Drop, server-to-server) are unaffected.
+- All entries-file rewrites are now atomic (temp file + rename); the automatic
+  legacy-format migration also snapshots the prior contents to `entries.md.bak`
+  first.
+
+### Fixed
+
+- Duplicate entry IDs are detected and repaired on load: when two blocks share
+  an ID the earliest keeps the number and later collisions are reassigned fresh
+  IDs, so the UI never renders colliding keys and state/delete operations can't
+  target the wrong block.
+- A non-loopback `ENTRYBOX_BIND` now logs a clear unauthenticated-exposure
+  warning at startup.
+
+---
+
 ## [1.4.0] - 2026-06-02
 
 ### Added

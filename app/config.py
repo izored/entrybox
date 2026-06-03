@@ -8,6 +8,9 @@ THEMES_DIR = BASE_DIR / "themes"
 BIND_HOST = os.getenv("ENTRYBOX_BIND", "127.0.0.1")
 PORT = int(os.getenv("ENTRYBOX_PORT", "3859"))
 WEBHOOK_URL = os.getenv("ENTRYBOX_WEBHOOK_URL", "")
+# Optional shared secret. When set, sensitive routes (file read, tree,
+# attachment upload) require header X-EntryBox-Token to match.
+TOKEN = os.getenv("ENTRYBOX_TOKEN", "")
 
 _STATE_FILE = DATA_DIR / "entrybox.json"
 

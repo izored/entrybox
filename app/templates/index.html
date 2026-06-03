@@ -1,0 +1,1348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EntryBox</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
+  <link rel="stylesheet" href="/static/style.css">
+  <style id="eb-theme">/* theme vars injected at runtime */</style>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body x-data="entrybox()" x-init="init()" :class="embed ? 'embed' : ''">
+
+<!-- ── OFFLINE OVERLAY ── -->
+<div id="eb-offline" class="eb-offline-overlay" x-show="!serverOnline" style="display:flex">
+  <div class="eb-offline-panel">
+    <div class="eb-offline-dot" :class="retrying ? 'connecting' : 'offline'"></div>
+    <div class="eb-offline-title" x-text="retrying ? 'Connecting…' : 'EntryBox server is not running'"></div>
+    <div class="eb-offline-sub" x-show="!retrying">Start the server, then click Retry.</div>
+    <div class="eb-offline-cmd-wrap" x-show="!retrying">
+      <code class="eb-offline-cmd" x-text="launchCmd"></code>
+      <button class="eb-offline-copy" @click="copyLaunchCmd()" x-text="_copyDone ? 'Copied!' : 'Copy'"></button>
+    </div>
+    <button class="btn btn-primary" x-show="!retrying" @click="startRetryLoop()">Retry</button>
+    <div class="eb-offline-retrying" x-show="retrying">Polling for server…</div>
+  </div>
+</div>
+<!-- ── /OFFLINE OVERLAY ── -->
+
+<!-- ── BOOT ANIMATION: replace inner content with your own motion ── -->
+<div id="eb-boot" x-show="booting" x-cloak class="dissolve" style="display:none">
+  <div class="eb-boot-logo" x-html="logoSvg"></div>
+  <div class="eb-boot-tagline">The idea board that lives in your repo.</div>
+</div>
+<!-- ── /BOOT ANIMATION ── -->
+
+<!-- ── ONBOARDING SLIDER ── -->
+<div id="eb-onboarding" x-show="onboarding" x-cloak style="display:none">
+  <div class="onb-slides">
+
+    <!-- Slide 1: Welcome -->
+    <div class="onb-slide" :class="{ active: onbSlide===0, prev: onbSlide>0 }">
+      <div class="onb-logo" x-html="logoSvg"></div>
+      <div class="onb-eyebrow">Welcome</div>
+      <h1 class="onb-title">The idea board that lives in your repo.</h1>
+      <div class="onb-body">
+        <p>EntryBox is a tiny local server. One markdown file per project. A state machine. A UI that takes 3 seconds to understand.</p>
+        <p>No SaaS. No database. No account. Your entries never leave the machine.</p>
+        <p style="margin-top:16px;padding:10px 14px;background:var(--surface2);border-left:3px solid var(--accent);border-radius:0 var(--radius) var(--radius) 0;font-size:12px;color:var(--text2)">Not a task manager. Not a planner. A drop box — log it now, work on it later.</p>
+      </div>
+    </div>
+
+    <!-- Slide 2: The Problem -->
+    <div class="onb-slide" :class="{ active: onbSlide===1, prev: onbSlide>1 }">
+      <div class="onb-eyebrow">The Problem</div>
+      <h1 class="onb-title">Ideas die in chat.</h1>
+      <div class="onb-body">
+        <p>Feedback gets buried in Slack threads. GitHub Issues feel too formal for a shower-thought at 2am. Notion needs an account and another open tab.</p>
+        <p>You just want to write it down and have your AI agent know about it. Not manage it — just not lose it.</p>
+        <p style="font-size:12px;color:var(--text2)">EntryBox doesn't manage your work. It holds it until you're ready.</p>
+      </div>
+    </div>
+
+    <!-- Slide 3: How it works -->
+    <div class="onb-slide" :class="{ active: onbSlide===2, prev: onbSlide>2 }">
+      <div class="onb-eyebrow">How it works</div>
+      <h1 class="onb-title">Log. Park. Ship.</h1>
+      <div class="onb-body">
+        <p>Every entry gets a unique ID, a type, and a state. You, or your AI agent, move it through states.</p>
+        <div style="margin-top:20px;font-family:var(--font-mono);font-size:13px;color:var(--text);background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;line-height:2">
+          <span style="color:var(--state-logged)">logged</span> →
+          <span style="color:var(--state-review)">review</span> →
+          <span style="color:var(--state-wip)">wip</span> →
+          <span style="color:var(--state-done)">done</span>
+          <br>
+          <span style="color:var(--text2);font-size:11px">↘ error (if blocked)</span>
+        </div>
+        <p style="margin-top:16px">Done entries timestamp themselves. The markdown file stays readable in any editor forever.</p>
+      </div>
+    </div>
+
+    <!-- Slide 4: Types & States -->
+    <div class="onb-slide" :class="{ active: onbSlide===3, prev: onbSlide>3 }">
+      <div class="onb-eyebrow">Types &amp; States</div>
+      <h1 class="onb-title">Color is meaning.</h1>
+      <div class="onb-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:16px">
+          <div>
+            <div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text2);margin-bottom:10px">Types</div>
+            <template x-for="t in [{l:'fix',c:'--type-fix'},{l:'improve',c:'--type-improve'},{l:'docs',c:'--type-docs'},{l:'idea',c:'--type-idea'},{l:'roadmap',c:'--type-roadmap'}]">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+                <span style="width:10px;height:10px;border-radius:50%;flex-shrink:0" :style="`background:var(${t.c})`"></span>
+                <span style="font-family:var(--font-mono);font-size:12px" x-text="t.l"></span>
+              </div>
+            </template>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text2);margin-bottom:10px">States</div>
+            <template x-for="s in [{l:'logged',c:'--state-logged'},{l:'review',c:'--state-review'},{l:'wip',c:'--state-wip'},{l:'done',c:'--state-done'},{l:'error',c:'--state-error'}]">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+                <span style="width:10px;height:10px;border-radius:50%;flex-shrink:0" :style="`background:var(${s.c})`"></span>
+                <span style="font-family:var(--font-mono);font-size:12px" x-text="s.l"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 5: Multi-project -->
+    <div class="onb-slide" :class="{ active: onbSlide===4, prev: onbSlide>4 }">
+      <div class="onb-eyebrow">Multi-project</div>
+      <h1 class="onb-title">One EntryBox. Every project.</h1>
+      <div class="onb-body">
+        <p>Register any number of projects. Each project's entries live in <code>.entrybox/entries.md</code> inside that project's own folder. They travel with the project, not with EntryBox.</p>
+        <div style="margin-top:20px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;font-family:var(--font-mono);font-size:11px;color:var(--text2);line-height:1.8">
+          <div><span style="color:var(--accent)">my-project/</span></div>
+          <div>&nbsp;&nbsp;<span style="color:var(--type-docs)">.entrybox/</span></div>
+          <div>&nbsp;&nbsp;&nbsp;&nbsp;entries.md &nbsp;<span style="color:var(--text2);font-size:10px">← lives here</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 6: AI tool selector -->
+    <div class="onb-slide" :class="{ active: onbSlide===5, prev: onbSlide>5 }">
+      <div class="onb-eyebrow">Agent Integration</div>
+      <h1 class="onb-title">Which AI coding agent do you use?</h1>
+      <div class="onb-body">
+        <p style="margin-bottom:20px">EntryBox writes a small instruction block into your agent's config file. Pick all that apply.</p>
+        <div class="agent-chips">
+          <template x-for="agent in allAgents" :key="agent.id">
+            <div class="agent-chip" :class="{ selected: onbSelectedAgents.includes(agent.id) }"
+                 @click="toggleOnbAgent(agent.id)">
+              <span class="chip-check" x-show="onbSelectedAgents.includes(agent.id)">✓</span>
+              <span x-text="agent.name"></span>
+              <span style="font-size:10px;color:var(--text2)" x-text="agent.config_file"></span>
+            </div>
+          </template>
+          <div class="agent-chip" @click="addAgentModal.open=true">
+            <span>+ Other</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 7: Agent integration preview -->
+    <div class="onb-slide" :class="{ active: onbSlide===6, prev: onbSlide>6 }">
+      <div class="onb-eyebrow">Agent Config Preview</div>
+      <h1 class="onb-title">Your agent integration.</h1>
+      <div class="onb-body">
+        <p style="margin-bottom:16px">When you register a project, EntryBox writes this block to your agent's config file. The block below is fully editable. Just keep the markers so EntryBox can find and update it later.</p>
+        <div x-show="onbSelectedAgents.length === 0" style="color:var(--text2);font-size:12px;padding:12px 0">
+          No agent selected. <span style="cursor:pointer;color:var(--accent)" @click="onbSlide=5">Go back and pick one.</span>
+        </div>
+        <template x-if="onbSelectedAgents.length > 0">
+          <div>
+            <div class="tab-strip" x-show="onbSelectedAgents.length > 1">
+              <template x-for="aid in onbSelectedAgents" :key="aid">
+                <button class="tab-btn" :class="{ active: onbAnnotationTab===aid }"
+                        @click="onbAnnotationTab=aid" x-text="agentById(aid)?.name"></button>
+              </template>
+            </div>
+            <template x-for="aid in onbSelectedAgents" :key="aid">
+              <div x-show="onbAnnotationTab===aid || onbSelectedAgents.length===1">
+                <div style="font-size:10px;color:var(--text2);margin-bottom:4px" x-text="`→ ${agentById(aid)?.config_file}`"></div>
+                <textarea class="modal-code" x-model="onbAnnotations[aid]" rows="8"></textarea>
+              </div>
+            </template>
+            <div class="modal-disclaimer">The default works well with your agent out of the box. Adapt freely, but keep the EntryBox markers so it can find and update the block later.</div>
+          </div>
+        </template>
+        <div style="margin-top:16px;display:flex;align-items:center;gap:10px;font-size:12px">
+          <input type="checkbox" id="onb-auto-write" x-model="onbAutoWrite" style="accent-color:var(--accent)">
+          <label for="onb-auto-write">Auto-write to agent config when registering projects</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 8: CLI -->
+    <div class="onb-slide" :class="{ active: onbSlide===7, prev: onbSlide>7 }">
+      <div class="onb-eyebrow">CLI &amp; API</div>
+      <h1 class="onb-title">Works with your agent.</h1>
+      <div class="onb-body">
+        <p style="margin-bottom:16px">Your agent can update entry states directly. Two ways:</p>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;font-family:var(--font-mono);font-size:11px;line-height:2;margin-bottom:12px">
+          <div style="color:var(--text2)"># CLI</div>
+          <div>python cli/entrybox.py update-state --project myproject --id ENTRY-0001 --state done</div>
+        </div>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;font-family:var(--font-mono);font-size:11px;line-height:2">
+          <div style="color:var(--text2)"># REST API</div>
+          <div>PATCH http://localhost:3859/api/projects/myproject/entries</div>
+          <div style="color:var(--text2)"># Body: {"id": "ENTRY-0001", "state": "done"}</div>
+        </div>
+        <p style="margin-top:16px">The entries.md file is plain markdown, so your agent can read it directly too.</p>
+      </div>
+    </div>
+
+    <!-- Slide 9: CTA / Made by Reda -->
+    <div class="onb-slide" :class="{ active: onbSlide===8, prev: onbSlide>8 }">
+      <div class="onb-eyebrow">That's it.</div>
+      <h1 class="onb-title">You're ready.</h1>
+      <div class="onb-body">
+        <p style="margin-bottom:24px">Register your first project and start logging entries. More tools coming.</p>
+        <div style="padding:20px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:20px">
+          <div style="font-size:13px;font-weight:700;margin-bottom:4px">Built by Reda Izo</div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:16px">DIR (dev.izo.red) &nbsp;·&nbsp; dev@izo.red</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <a href="https://dev.izo.red" target="_blank" class="btn btn-ghost" style="font-size:11px">Visit dev.izo.red</a>
+            <a href="https://github.com/izored" target="_blank" class="btn btn-ghost" style="font-size:11px">GitHub</a>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:8px">
+          <input type="checkbox" id="onb-show-again" x-model="showIntroOnLaunch" style="accent-color:var(--accent)">
+          <label for="onb-show-again">Show this intro on next launch</label>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /.onb-slides -->
+
+  <div class="onb-nav">
+    <button class="onb-skip" @click="skipOnboarding()" x-show="onbSlide < 8">Skip</button>
+    <div x-show="onbSlide >= 8" style="width:40px"></div>
+    <div class="onb-dots">
+      <template x-for="i in 9" :key="i">
+        <div class="onb-dot" :class="{ active: onbSlide === i-1 }" @click="goToSlide(i-1)"></div>
+      </template>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost btn-sm" @click="prevSlide()" x-show="onbSlide > 0">← Back</button>
+      <button class="btn btn-primary btn-sm" @click="nextSlide()" x-show="onbSlide < 8">Next →</button>
+      <button class="btn btn-primary btn-sm" @click="finishOnboarding()" x-show="onbSlide === 8">Get Started →</button>
+    </div>
+  </div>
+</div>
+<!-- ── /ONBOARDING ── -->
+
+<!-- ── MAIN APP ── -->
+<div id="app" x-show="!booting && !onboarding" x-cloak style="display:none">
+
+  <!-- Embed status bar -->
+  <div x-show="embed" style="display:flex;flex-wrap:nowrap;align-items:center;height:24px;line-height:24px;padding:0 12px;border-bottom:1px solid var(--border);font-size:10px;overflow:hidden;white-space:nowrap">
+    <span style="flex-shrink:0;color:var(--text1);font-weight:600;letter-spacing:.3px">EntryBox</span>
+    <span style="flex-shrink:0;margin:0 6px;color:var(--border)">·</span>
+    <span style="flex-shrink:0" x-text="serverOnline ? 'Live' : 'Offline'" :class="serverOnline ? 'eb-pulse-text' : ''" :style="serverOnline ? 'color:var(--accent)' : 'color:#e05'"></span>
+    <span style="flex-shrink:0;margin:0 6px;color:var(--border)" x-show="activeProject">·</span>
+    <span style="flex-shrink:0;color:var(--text1);max-width:120px;overflow:hidden;text-overflow:ellipsis" x-show="activeProject" x-text="activeProject?.name"></span>
+    <span style="flex-shrink:0;margin:0 6px;color:var(--border)" x-show="activeProject && entries.length > 0">·</span>
+    <span style="flex-shrink:0;color:var(--text2)" x-show="activeProject && entries.length > 0" x-text="entries.length + ' entr' + (entries.length === 1 ? 'y' : 'ies')"></span>
+    <span style="flex-shrink:0;margin:0 6px;color:var(--border)" x-show="activeProject && entries.filter(e=>e.state==='wip').length > 0">·</span>
+    <span style="flex-shrink:0;color:var(--type-improve)" x-show="activeProject && entries.filter(e=>e.state==='wip').length > 0" x-text="entries.filter(e=>e.state==='wip').length + ' wip'"></span>
+    <span style="flex-shrink:0;margin:0 6px;color:var(--border)" x-show="activeProject && entries.filter(e=>e.state==='review').length > 0">·</span>
+    <span style="flex-shrink:0;color:var(--type-docs)" x-show="activeProject && entries.filter(e=>e.state==='review').length > 0" x-text="entries.filter(e=>e.state==='review').length + ' review'"></span>
+    <span style="flex-shrink:0;margin:0 6px;color:var(--border)" x-show="activeProject && entries.length > 0">·</span>
+    <span style="flex-shrink:0;color:var(--text2)" x-show="activeProject && entries.length > 0" x-text="'last: ' + entries[0]?.type"></span>
+    <span style="flex:1"></span>
+    <span style="flex-shrink:0;font-family:var(--font-mono);font-size:9px;color:var(--text2);opacity:.5;margin-right:10px" x-show="activeProject" x-text="activeProject?.prefix"></span>
+    <a href="mailto:dev@izo.red?subject=EntryBox Feedback" target="_blank" style="flex-shrink:0;font-size:9px;color:var(--text2);text-decoration:none;border:1px solid var(--border);border-radius:3px;padding:1px 6px;letter-spacing:.3px;opacity:.7;line-height:16px" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.7">Feedback</a>
+  </div>
+
+  <!-- Topbar -->
+  <div id="topbar" x-show="!embed">
+    <div class="logo" x-html="logoSvg"></div>
+    <span style="color:var(--text2);font-size:11px" x-show="activeProject" x-text="activeProject?.name"></span>
+    <div class="ml-auto" style="display:flex;align-items:center;gap:8px">
+      <div class="eb-status-dot" :class="serverOnline ? 'online' : 'offline'"
+           :title="serverOnline ? 'Server connected' : 'Server disconnected'"></div>
+      <select class="theme-select" x-model="activeThemeId" @change="applyTheme(activeThemeId)">
+        <template x-for="t in themes" :key="t.id">
+          <option :value="t.id" x-text="t.name"></option>
+        </template>
+      </select>
+      <button class="btn btn-ghost btn-sm" @click="settingsOpen=true" title="Settings">⚙</button>
+    </div>
+  </div>
+
+  <div class="eb-toast" x-show="serverToast" x-transition x-text="_toastMsg" x-cloak></div>
+
+  <div id="body">
+
+    <!-- Sidebar -->
+    <div id="sidebar" x-show="!embed">
+      <div class="sidebar-header">Projects</div>
+      <div class="project-list">
+        <template x-for="p in projects" :key="p.id">
+          <div class="project-item" :class="{ active: activeProjectId===p.id, unreachable: p.status==='unreachable' }"
+               @click="selectProject(p.id)">
+            <div class="project-dot" :style="`background:${p.color}`"></div>
+            <span x-text="p.name" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+            <span class="project-warn" x-show="p.status==='unreachable'" title="Root directory unreachable">⚠</span>
+          </div>
+        </template>
+        <div x-show="projects.length === 0" style="padding:12px 14px;font-size:11px;color:var(--text2)">
+          No projects yet.
+        </div>
+      </div>
+      <div style="padding:8px 14px">
+        <div class="add-project-btn" @click="openAddProject()">+ Add Project</div>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div id="content">
+
+      <!-- No project selected -->
+      <div x-show="!activeProject && !embed" class="empty-state">
+        <div class="empty-icon">◈</div>
+        <div style="font-weight:600;margin-bottom:6px">No project selected</div>
+        <div>Add a project from the sidebar to get started.</div>
+      </div>
+
+      <!-- Embed: no project specified -->
+      <div x-show="embed && !activeProject" class="empty-state">
+        <div>No project. Add <code>?project=id</code> to the URL.</div>
+      </div>
+
+      <!-- Active project view -->
+      <template x-if="activeProject">
+        <div>
+          <div class="section-header" x-show="!embed">
+            <span class="section-title" x-text="activeProject.name"></span>
+            <span class="badge badge-id" style="font-size:10px" x-text="activeProject.prefix + '-XXXX'"></span>
+            <span class="text-muted text-sm" x-text="entries.length + ' entries'"></span>
+          </div>
+
+          <!-- Log form -->
+          <div class="card card-accent" style="margin-bottom:16px">
+            <div style="font-size:12px;font-weight:600;margin-bottom:10px" x-show="!embed">Log New Entry</div>
+            <div class="log-row">
+              <input type="text" x-model="logForm.title" placeholder="Short title: what's the entry?"
+                     @keydown.enter="!logForm.saving && logForm.title.trim() && submitEntry()">
+              <select x-model="logForm.type">
+                <option value="fix">🔴 fix</option>
+                <option value="improve">🟢 improve</option>
+                <option value="docs">🔵 docs</option>
+                <option value="idea" selected>🟠 idea</option>
+                <option value="roadmap">🟣 roadmap</option>
+              </select>
+            </div>
+            <textarea x-model="logForm.body" placeholder="Optional: describe it. Why it matters, how it should work, what you observed…"
+                      rows="3" style="margin-bottom:10px"></textarea>
+            <div style="display:flex;align-items:center;gap:10px">
+              <button class="btn btn-primary" @click="submitEntry()" :disabled="!logForm.title.trim() || logForm.saving">
+                + Log Entry
+              </button>
+              <span class="saved-badge" x-show="logForm.saved" x-transition>✓ saved</span>
+            </div>
+          </div>
+
+          <!-- Unreachable warning -->
+          <div x-show="activeProject.status==='unreachable'" class="card" style="border-color:var(--red);color:var(--red)">
+            ⚠ Project root directory is unreachable. Check the path in settings.
+          </div>
+
+          <!-- Entries list -->
+          <div x-show="loadingEntries" style="padding:24px;color:var(--text2);font-size:12px">Loading…</div>
+
+          <div x-show="!loadingEntries && entries.length === 0" class="empty-state">
+            <div class="empty-icon">📋</div>
+            <div style="font-weight:600;margin-bottom:6px">Nothing logged yet</div>
+            <div>Add the first entry above.</div>
+          </div>
+
+          <template x-for="entry in entries" :key="entry.id">
+            <div class="entry-card" :style="typeStyle(entry.type)">
+              <div class="entry-header">
+                <span class="badge badge-id" x-text="entry.id"></span>
+                <span class="badge" :class="'badge-' + entry.type" x-text="entry.type"></span>
+
+                <!-- State selector (not done) -->
+                <select class="state-select" x-show="entry.state !== 'done'"
+                        :value="entry.state"
+                        @change="updateState(entry, $event.target.value)">
+                  <option value="logged">logged</option>
+                  <option value="review">review</option>
+                  <option value="wip">wip</option>
+                  <option value="done">done</option>
+                  <option value="error">error</option>
+                </select>
+
+                <!-- Done button (done state) -->
+                <button class="state-done-btn" x-show="entry.state === 'done'" disabled>
+                  done · <span x-text="fmtDate(entry.done_at)"></span>
+                </button>
+
+                <span class="entry-title" x-show="editingId !== entry.id" x-text="entry.title"></span>
+                <span class="entry-title" x-show="editingId === entry.id" style="color:var(--text2);font-style:italic">editing…</span>
+                <span class="entry-ts" x-text="entry.timestamp"></span>
+                <button class="edit-btn" x-show="editingId !== entry.id" @click="startEdit(entry)" title="Edit">✎</button>
+                <button class="delete-btn" x-show="editingId !== entry.id" @click="confirmDelete(entry)" title="Remove">✕</button>
+              </div>
+
+              <!-- Inline edit form -->
+              <div class="entry-edit" x-show="editingId === entry.id" x-cloak>
+                <div class="log-row">
+                  <input type="text" x-model="editForm.title" placeholder="Title"
+                         @keydown.enter="!editForm.saving && editForm.title.trim() && saveEdit(entry)"
+                         @keydown.escape="cancelEdit()">
+                  <select x-model="editForm.type">
+                    <option value="fix">🔴 fix</option>
+                    <option value="improve">🟢 improve</option>
+                    <option value="docs">🔵 docs</option>
+                    <option value="idea">🟠 idea</option>
+                    <option value="roadmap">🟣 roadmap</option>
+                  </select>
+                </div>
+                <textarea x-model="editForm.body" rows="3"
+                          placeholder="Optional: describe it. Why it matters, how it should work…"></textarea>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <button class="btn btn-primary btn-sm" @click="saveEdit(entry)"
+                          :disabled="!editForm.title.trim() || editForm.saving"
+                          x-text="editForm.saving ? 'Saving…' : 'Save'"></button>
+                  <button class="btn btn-ghost btn-sm" @click="cancelEdit()">Cancel</button>
+                </div>
+              </div>
+
+              <div class="entry-body-wrap" x-show="entry.body && editingId !== entry.id">
+                <div class="entry-body"
+                     :class="isLongBody(entry) && !expandedEntries[entry.id] ? 'body-collapsed' : ''"
+                     x-html="renderBody(entry.body)"></div>
+                <button x-show="isLongBody(entry)" class="body-toggle"
+                        @click="toggleExpand(entry.id)"
+                        x-text="expandedEntries[entry.id] ? '↑ show less' : '↓ show more'"></button>
+                <button class="body-copy"
+                        @click="copyBody(entry)"
+                        :title="copiedId === entry.id ? 'Copied!' : 'Copy body'"
+                        x-html="copiedId === entry.id ? '✓' : '<svg width=\'13\' height=\'13\' viewBox=\'0 0 13 13\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.5\'><rect x=\'4\' y=\'1\' width=\'8\' height=\'9\' rx=\'1.5\'/><rect x=\'1\' y=\'4\' width=\'8\' height=\'9\' rx=\'1.5\' fill=\'var(--surface)\'/></svg>'">
+                </button>
+              </div>
+            </div>
+          </template>
+
+          <!-- Load more -->
+          <div x-show="entries.length < entriesTotal" style="padding:12px 16px;text-align:center">
+            <button class="btn btn-ghost btn-sm" @click="loadMoreEntries()"
+                    :disabled="loadingMore"
+                    x-text="loadingMore ? 'Loading…' : 'Load more (' + (entriesTotal - entries.length) + ' remaining)'">
+            </button>
+          </div>
+
+        </div>
+      </template>
+
+    </div><!-- /#content -->
+  </div><!-- /#body -->
+</div><!-- /#app -->
+
+<!-- ── SETTINGS PANEL ── -->
+<div id="settings-panel" :class="{ open: settingsOpen }" x-show="settingsOpen" x-cloak>
+  <button class="settings-close" @click="settingsOpen=false">✕</button>
+  <h2 style="margin-bottom:20px">Settings</h2>
+
+  <div class="settings-section">
+    <div class="settings-section-title">Theme</div>
+    <select class="theme-select" x-model="activeThemeId" @change="applyTheme(activeThemeId)" style="width:100%">
+      <template x-for="t in themes" :key="t.id">
+        <option :value="t.id" x-text="t.name"></option>
+      </template>
+    </select>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title">AI Agents (global defaults)</div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:10px">Active when registering new projects.</div>
+    <template x-for="agent in allAgents" :key="agent.id">
+      <div class="toggle-row">
+        <input type="checkbox" :id="'agent-' + agent.id"
+               :checked="config.ai_tools.includes(agent.id)"
+               @change="toggleGlobalAgent(agent.id, $event.target.checked)"
+               style="accent-color:var(--accent)">
+        <label :for="'agent-' + agent.id" style="flex:1">
+          <span x-text="agent.name"></span>
+          <span style="font-family:var(--font-mono);font-size:10px;color:var(--text2);margin-left:6px" x-text="agent.config_file"></span>
+        </label>
+        <button x-show="!agent.built_in" class="btn btn-ghost btn-sm" style="color:var(--red);border-color:var(--red);font-size:10px"
+                @click="deleteLearnedAgent(agent.id)">remove</button>
+      </div>
+    </template>
+    <div style="margin-top:10px">
+      <button class="btn btn-ghost btn-sm" @click="addAgentModal.open=true">+ Add custom agent</button>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title">Agent Config</div>
+    <div class="toggle-row">
+      <input type="checkbox" id="auto-write" x-model="config.auto_write_agent_config"
+             @change="saveConfig()" style="accent-color:var(--accent)">
+      <label for="auto-write">Auto-write annotation to agent config files</label>
+    </div>
+  </div>
+
+  <div class="settings-section" x-show="activeProject">
+    <div class="settings-section-title">Project: <span x-text="activeProject?.name"></span></div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:10px">Agent config files for this project.</div>
+    <template x-for="agent in allAgents" :key="agent.id">
+      <div class="toggle-row">
+        <input type="checkbox" :id="'proj-agent-' + agent.id"
+               :checked="activeProject?.active_agents?.includes(agent.id)"
+               @change="toggleProjectAgent(agent.id, $event.target.checked)"
+               style="accent-color:var(--accent)">
+        <label :for="'proj-agent-' + agent.id" x-text="agent.name"></label>
+      </div>
+    </template>
+  </div>
+
+  <hr>
+  <div class="settings-section">
+    <div class="settings-section-title">Onboarding</div>
+    <button class="btn btn-ghost btn-sm" @click="resetIntro()">Show intro again</button>
+  </div>
+</div>
+
+<!-- ── ADD PROJECT MODAL ── -->
+<div class="modal-overlay" x-show="addProjectModal.open" x-cloak @click.self="addProjectModal.open=false">
+  <div class="modal" @keydown.escape.window="addProjectModal.open=false">
+    <div class="modal-title">Register Project</div>
+
+    <div class="modal-section">
+      <div class="modal-section-label">Project name</div>
+      <input type="text" x-model="addProjectModal.name" placeholder="My Project">
+    </div>
+
+    <div class="modal-section">
+      <div class="modal-section-label">Root directory</div>
+      <div style="display:flex;gap:8px">
+        <input type="text" x-model="addProjectModal.root_dir" placeholder="D:\my-project" style="flex:1">
+        <button class="btn btn-ghost btn-sm" @click="scanProjectAgents()">Scan agents</button>
+      </div>
+      <div style="font-size:10px;color:var(--text2);margin-top:4px">Full path to the project root.</div>
+    </div>
+
+    <div class="modal-section" style="display:flex;gap:12px">
+      <div style="flex:1">
+        <div class="modal-section-label">ID prefix</div>
+        <input type="text" x-model="addProjectModal.prefix" placeholder="ENTRY" style="text-transform:uppercase">
+      </div>
+      <div style="flex:1">
+        <div class="modal-section-label">Project ID (slug)</div>
+        <input type="text" x-model="addProjectModal.id" placeholder="auto">
+      </div>
+    </div>
+
+    <div class="modal-section">
+      <div class="modal-section-label">Accent color</div>
+      <input type="color" x-model="addProjectModal.color" style="width:40px;height:28px;border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;background:none;padding:2px">
+    </div>
+
+    <div class="modal-section" x-show="addProjectModal.migrate_from">
+      <div class="modal-section-label">Migrate existing entries from</div>
+      <div style="font-family:var(--font-mono);font-size:11px;color:var(--text2)" x-text="addProjectModal.migrate_from"></div>
+    </div>
+
+    <!-- Agent selection -->
+    <div class="modal-section">
+      <div class="modal-section-label">AI Agent Config Files</div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:8px">EntryBox will write its instruction block to these files.</div>
+      <div class="agent-chips">
+        <template x-for="agent in allAgents" :key="agent.id">
+          <div class="agent-chip" :class="{ selected: addProjectModal.agent_ids.includes(agent.id) }"
+               @click="toggleModalAgent(agent.id)">
+            <span class="chip-check" x-show="addProjectModal.agent_ids.includes(agent.id)">✓</span>
+            <span x-text="agent.name"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Legacy block notice -->
+    <div class="modal-section" x-show="addProjectModal.legacyAgents.length > 0" x-cloak>
+      <div class="modal-notice">
+        Existing EntryBox instructions found (no marker tags) in
+        <strong x-text="legacyAgentNames()"></strong>.
+        Registering will replace that block in place with a tracked one. No duplicate is added.
+      </div>
+    </div>
+
+    <!-- Annotation preview (tabbed) -->
+    <div class="modal-section" x-show="addProjectModal.agent_ids.length > 0">
+      <div class="modal-section-label">
+        Agent config preview
+        <span style="font-size:10px;font-weight:400;text-transform:none;color:var(--text2)">(editable)</span>
+      </div>
+      <div class="tab-strip" x-show="addProjectModal.agent_ids.length > 1">
+        <template x-for="aid in addProjectModal.agent_ids" :key="aid">
+          <button class="tab-btn" :class="{ active: addProjectModal.activeTab===aid }"
+                  @click="addProjectModal.activeTab=aid" x-text="agentById(aid)?.name"></button>
+        </template>
+      </div>
+      <template x-for="aid in addProjectModal.agent_ids" :key="aid">
+        <div x-show="addProjectModal.activeTab===aid || addProjectModal.agent_ids.length===1">
+          <div style="font-size:10px;color:var(--text2);margin-bottom:4px" x-text="`→ ${agentById(aid)?.config_file}`"></div>
+          <textarea class="modal-code" x-model="addProjectModal.annotations[aid]" rows="8"></textarea>
+        </div>
+      </template>
+      <div class="modal-disclaimer">The default works well with your agent out of the box. Adapt freely, but keep the EntryBox markers so it can find and update the block later.</div>
+    </div>
+
+    <div class="modal-section">
+      <div class="toggle-row">
+        <input type="checkbox" id="modal-auto-write" x-model="addProjectModal.autoWrite" style="accent-color:var(--accent)">
+        <label for="modal-auto-write">Auto-write annotation to agent config files</label>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" @click="addProjectModal.open=false">Cancel</button>
+      <button class="btn btn-primary" @click="submitAddProject()"
+              :disabled="!addProjectModal.name.trim() || !addProjectModal.root_dir.trim()">
+        Register Project
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── ADD CUSTOM AGENT MODAL ── -->
+<div class="modal-overlay" x-show="addAgentModal.open" x-cloak @click.self="addAgentModal.open=false">
+  <div class="modal" style="width:420px">
+    <div class="modal-title">Add Custom Agent</div>
+    <div class="modal-section">
+      <div class="modal-section-label">Agent name</div>
+      <input type="text" x-model="addAgentModal.name" placeholder="e.g. My Team Agent">
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-label">Config file (relative to project root)</div>
+      <input type="text" x-model="addAgentModal.config_file" placeholder="e.g. docs/AI_RULES.md">
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-label">Marker style</div>
+      <select x-model="addAgentModal.template" style="width:100%">
+        <option value="markdown">HTML comment (<!-- EntryBox --> ... <!-- /EntryBox -->)</option>
+        <option value="comment"># comment (# EntryBox ... # /EntryBox)</option>
+      </select>
+    </div>
+    <div class="modal-disclaimer" style="margin-top:8px">
+      EntryBox will learn this agent and remember it for future projects.
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" @click="addAgentModal.open=false">Cancel</button>
+      <button class="btn btn-primary" @click="submitAddAgent()"
+              :disabled="!addAgentModal.name.trim() || !addAgentModal.config_file.trim()">
+        Add Agent
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── DELETE CONFIRM MODAL ── -->
+<div class="modal-overlay" x-show="deleteModal.open" x-cloak @click.self="deleteModal.open=false">
+  <div class="modal" style="width:380px">
+    <div class="modal-title">Remove Entry</div>
+    <div style="font-size:13px;margin-bottom:16px">
+      Remove <strong x-text="deleteModal.entry?.id"></strong>?
+      <div style="color:var(--text2);font-size:12px;margin-top:4px" x-text="deleteModal.entry?.title"></div>
+    </div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:16px">This removes the entry from entries.md. Cannot be undone.</div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" @click="deleteModal.open=false">Cancel</button>
+      <button class="btn btn-danger" @click="doDelete()">Remove</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function entrybox() {
+  return {
+    // Server health
+    serverOnline: true,
+    retrying: false,
+    launchCmd: 'python -m uvicorn app.main:app --host 127.0.0.1 --port 3859 --reload',
+    serverToast: false,
+    _toastMsg: '',
+    _copyDone: false,
+    _healthTimer: null,
+
+    // Boot & onboarding
+    booting: true,
+    onboarding: false,
+    onbSlide: 0,
+    onbSelectedAgents: [],
+    onbAnnotationTab: '',
+    onbAnnotations: {},
+    onbAutoWrite: true,
+    showIntroOnLaunch: false,
+
+    // Config
+    config: { booted: false, onboarded: false, theme: 'dark', ai_tools: ['claude-code'], auto_write_agent_config: true },
+
+    // Embed mode
+    embed: false,
+    embedProjectId: null,
+
+    // Projects & entries
+    projects: [],
+    activeProjectId: null,
+    entries: [],
+    entriesTotal: 0,
+    entriesOffset: 0,
+    entriesLimit: 50,
+    loadingEntries: false,
+    loadingMore: false,
+    expandedEntries: {},
+    copiedId: null,
+    editingId: null,
+    editForm: { title: '', body: '', type: 'idea', saving: false },
+
+    // Brand
+    logoSvg: '',
+
+    // Themes
+    themes: [],
+    activeThemeId: 'dark',
+
+    // Agents
+    allAgents: [],
+
+    // Log form
+    logForm: { title: '', body: '', type: 'idea', saving: false, saved: false },
+
+    // Panels & modals
+    settingsOpen: false,
+    addProjectModal: {
+      open: false, name: '', root_dir: '', prefix: 'ENTRY', id: '', color: '#3b9eff',
+      agent_ids: [], annotations: {}, activeTab: '', autoWrite: true, migrate_from: null,
+      legacyAgents: [],
+    },
+    addAgentModal: { open: false, name: '', config_file: '', template: 'markdown' },
+    deleteModal: { open: false, entry: null },
+
+    get activeProject() {
+      if (this.embed && this.embedProjectId)
+        return this.projects.find(p => p.id === this.embedProjectId) || null;
+      return this.projects.find(p => p.id === this.activeProjectId) || null;
+    },
+
+    async init() {
+      // ── Server preflight ─────────────────────────────────────
+      try {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 2000);
+        await fetch('/health', { signal: ctrl.signal });
+        clearTimeout(tid);
+        this.serverOnline = true;
+      } catch {
+        this.serverOnline = false;
+        this.startRetryLoop();
+        return;
+      }
+      // ── Normal init ──────────────────────────────────────────
+
+      // Parse query params
+      const params = new URLSearchParams(location.search);
+      this.embed = params.has('embed');
+      this.embedProjectId = params.get('project') || null;
+
+      // Parallel fetch: logo (non-embed only) + themes + config + agents (non-embed only)
+      const fetches = [
+        this.loadThemes(),
+        fetch('/api/config').then(r => r.json()).catch(() => ({})),
+      ];
+      if (!this.embed) {
+        fetches.push(
+          fetch('/assets/logo.svg').then(r => r.text()).catch(() => ''),
+          this.loadAgents(),
+        );
+      }
+      const [, cfg, logoSvg] = await Promise.all(fetches);
+      if (!this.embed) this.logoSvg = logoSvg;
+      this.config = { ...this.config, ...cfg };
+      this.activeThemeId = this.config.theme || 'dark';
+      this.applyTheme(this.activeThemeId, false);
+
+      // Boot animation — skip entirely in embed mode
+      if (!this.config.booted && !this.embed) {
+        this.booting = true;
+        setTimeout(() => {
+          this.booting = false;
+          if (!this.config.onboarded && !this.embed) {
+            this.onbSelectedAgents = [...(this.config.ai_tools || [])];
+            this.onbAutoWrite = this.config.auto_write_agent_config !== false;
+            this.generateOnbAnnotations();
+            this.onboarding = true;
+          }
+          fetch('/api/config', { method: 'PATCH', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ booted: true }) });
+        }, 1800);
+      } else {
+        this.booting = false;
+      }
+
+      // Load projects
+      await this.loadProjects();
+
+      // Auto-select first project or embed project
+      if (this.embed && this.embedProjectId) {
+        this.activeProjectId = this.embedProjectId;
+        await this.loadEntries();
+      } else if (this.projects.length > 0 && !this.activeProjectId) {
+        this.activeProjectId = this.projects[0].id;
+        await this.loadEntries();
+      }
+
+      this.startHealthPoll();
+    },
+
+    startRetryLoop() {
+      if (this._healthTimer) return;
+      this.retrying = true;
+      this._healthTimer = setInterval(async () => {
+        try {
+          const ctrl = new AbortController();
+          const tid = setTimeout(() => ctrl.abort(), 2000);
+          await fetch('/health', { signal: ctrl.signal });
+          clearTimeout(tid);
+          clearInterval(this._healthTimer);
+          this._healthTimer = null;
+          this.retrying = false;
+          this.serverOnline = true;
+          await new Promise(r => setTimeout(r, 900));
+          await this.init();
+        } catch { /* still offline */ }
+      }, 2000);
+    },
+
+    startHealthPoll() {
+      if (this._healthTimer) clearInterval(this._healthTimer);
+      this._healthTimer = setInterval(async () => {
+        try {
+          const ctrl = new AbortController();
+          const tid = setTimeout(() => ctrl.abort(), 3000);
+          await fetch('/health', { signal: ctrl.signal });
+          clearTimeout(tid);
+          if (!this.serverOnline) {
+            this.serverOnline = true;
+            this.showToast('Server reconnected');
+          }
+        } catch {
+          if (this.serverOnline) {
+            this.serverOnline = false;
+            this.showToast('Server disconnected');
+            clearInterval(this._healthTimer);
+            this._healthTimer = null;
+            this.startRetryLoop();
+          }
+        }
+      }, 30000);
+    },
+
+    showToast(msg) {
+      this._toastMsg = msg;
+      this.serverToast = true;
+      setTimeout(() => { this.serverToast = false; }, 3500);
+    },
+
+    copyLaunchCmd() {
+      navigator.clipboard.writeText(this.launchCmd).catch(() => {});
+      this._copyDone = true;
+      setTimeout(() => { this._copyDone = false; }, 1800);
+    },
+
+    async loadThemes() {
+      const data = await fetch('/api/themes').then(r => r.json()).catch(() => ({ themes: [], active: 'dark' }));
+      this.themes = data.themes || [];
+      this.activeThemeId = data.active || 'dark';
+    },
+
+    async applyTheme(themeId, save = true) {
+      let data;
+      if (save) {
+        data = await fetch('/api/themes/active', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: themeId }),
+        }).then(r => r.json()).catch(() => null);
+      } else {
+        data = await fetch(`/api/themes/${themeId}`).then(r => r.json()).catch(() => null);
+      }
+      const vars = data?.vars || {};
+      const css = Object.entries(vars).map(([k, v]) => `${k}:${v}`).join(';');
+      document.getElementById('eb-theme').textContent = `:root{${css}}`;
+      this.activeThemeId = themeId;
+      if (save) this.config.theme = themeId;
+    },
+
+    async loadAgents() {
+      const data = await fetch('/api/agents').then(r => r.json()).catch(() => ({ agents: [] }));
+      this.allAgents = data.agents || [];
+    },
+
+    async loadProjects() {
+      const data = await fetch('/api/projects').then(r => r.json()).catch(() => ({ projects: [] }));
+      this.projects = data.projects || [];
+    },
+
+    async loadEntries() {
+      if (!this.activeProject) return;
+      this.loadingEntries = true;
+      this.entriesOffset = 0;
+      const data = await fetch(`/api/projects/${this.activeProject.id}/entries?limit=${this.entriesLimit}&offset=0`)
+        .then(r => r.json()).catch(() => ({ entries: [], total: 0 }));
+      this.entries = data.entries || [];
+      this.entriesTotal = data.total ?? this.entries.length;
+      this.loadingEntries = false;
+    },
+
+    async loadMoreEntries() {
+      if (!this.activeProject || this.loadingMore) return;
+      const nextOffset = this.entriesOffset + this.entriesLimit;
+      if (nextOffset >= this.entriesTotal) return;
+      this.loadingMore = true;
+      const data = await fetch(`/api/projects/${this.activeProject.id}/entries?limit=${this.entriesLimit}&offset=${nextOffset}`)
+        .then(r => r.json()).catch(() => ({ entries: [], total: 0 }));
+      this.entries = this.entries.concat(data.entries || []);
+      this.entriesOffset = nextOffset;
+      this.entriesTotal = data.total ?? this.entriesTotal;
+      this.loadingMore = false;
+    },
+
+    async selectProject(id) {
+      this.activeProjectId = id;
+      this.settingsOpen = false;
+      await this.loadEntries();
+    },
+
+    async submitEntry() {
+      if (!this.logForm.title.trim() || !this.activeProject) return;
+      this.logForm.saving = true;
+      const res = await fetch(`/api/projects/${this.activeProject.id}/entries`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: this.logForm.title, body: this.logForm.body, type: this.logForm.type }),
+      }).then(r => r.json()).catch(() => null);
+      this.logForm = { title: '', body: '', type: 'idea', saving: false, saved: true };
+      if (res?.id) {
+        this.entries.unshift({ id: res.id, timestamp: res.timestamp, type: res.type,
+          state: res.state, done_at: res.done_at ?? null, title: res.title, body: res.body ?? '' });
+        this.entriesTotal++;
+      } else {
+        await this.loadEntries();
+      }
+      setTimeout(() => { this.logForm.saved = false; }, 2000);
+    },
+
+    async updateState(entry, newState) {
+      const idx = this.entries.indexOf(entry);
+      const prevState = entry.state;
+      const prevDoneAt = entry.done_at;
+      if (idx !== -1) {
+        this.entries[idx].state = newState;
+        if (newState !== 'done') this.entries[idx].done_at = null;
+      }
+      const res = await fetch(`/api/projects/${this.activeProject.id}/entries`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: entry.id, state: newState }),
+      }).then(r => r.json()).catch(() => null);
+      if (res?.entry?.done_at && idx !== -1) {
+        this.entries[idx].done_at = res.entry.done_at;
+      } else if (!res?.ok && idx !== -1) {
+        this.entries[idx].state = prevState;
+        this.entries[idx].done_at = prevDoneAt;
+      }
+    },
+
+    confirmDelete(entry) {
+      this.deleteModal = { open: true, entry };
+    },
+
+    async doDelete() {
+      if (!this.deleteModal.entry) return;
+      const id = this.deleteModal.entry.id;
+      const idx = this.entries.findIndex(e => e.id === id);
+      if (idx !== -1) this.entries.splice(idx, 1);
+      this.deleteModal.open = false;
+      const res = await fetch(`/api/projects/${this.activeProject.id}/entries`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      }).then(r => r.json()).catch(() => null);
+      if (res?.ok) {
+        this.entriesTotal = Math.max(0, this.entriesTotal - 1);
+      } else {
+        await this.loadEntries();
+      }
+    },
+
+    startEdit(entry) {
+      this.editingId = entry.id;
+      this.editForm = { title: entry.title, body: entry.body || '', type: entry.type, saving: false };
+    },
+
+    cancelEdit() {
+      this.editingId = null;
+    },
+
+    async saveEdit(entry) {
+      if (!this.editForm.title.trim() || this.editForm.saving) return;
+      this.editForm.saving = true;
+      const res = await fetch(`/api/projects/${this.activeProject.id}/entries`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: entry.id, title: this.editForm.title.trim(),
+          body: this.editForm.body, type: this.editForm.type }),
+      }).then(r => r.json()).catch(() => null);
+      this.editForm.saving = false;
+      if (res?.ok && res.entry) {
+        const idx = this.entries.findIndex(e => e.id === entry.id);
+        if (idx !== -1) {
+          this.entries[idx].title = res.entry.title;
+          this.entries[idx].body = res.entry.body ?? '';
+          this.entries[idx].type = res.entry.type;
+        }
+        this.editingId = null;
+      }
+    },
+
+    typeStyle(type) {
+      const map = { fix: '--type-fix', improve: '--type-improve', docs: '--type-docs', idea: '--type-idea', roadmap: '--type-roadmap' };
+      const v = map[type] || '--type-idea';
+      return `border-left-color:var(${v})`;
+    },
+
+    fmtDate(ts) {
+      if (!ts) return '';
+      try {
+        const d = new Date(ts.replace(' ', 'T'));
+        const diff = Date.now() - d.getTime();
+        const m = Math.floor(diff / 60000);
+        if (m < 1) return 'just now';
+        if (m < 60) return `${m}m ago`;
+        const h = Math.floor(m / 60);
+        if (h < 24) return `${h}h ago`;
+        return ts;
+      } catch { return ts; }
+    },
+
+    renderBody(text) {
+      if (!text) return '';
+      const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      // fenced code blocks
+      let html = esc(text).replace(/```[\w]*\n?([\s\S]*?)```/g, (_, code) =>
+        `<pre><code>${code.trimEnd()}</code></pre>`);
+      // inline code (operate on non-pre parts only via split trick)
+      html = html.replace(/`([^`\n]+)`/g, '<code class="inline-code">$1</code>');
+      // bold
+      html = html.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+      // URLs
+      html = html.replace(/(https?:\/\/[^\s<"]+)/g, '<span class="url-token">$1</span>');
+      // paths: ./foo, ../foo, /foo/bar, C:\foo, src/foo/bar (must contain / or \)
+      html = html.replace(/(?<![`\w])((?:[A-Za-z]:[\\/]|\.{1,2}[\\/]|\/)[^\s<"'`*,;]+|(?:[\w.-]+\/)+[\w.-]+(?:\/)?)/g,
+        '<span class="path-token">$1</span>');
+      // newlines outside pre blocks
+      html = html.replace(/(?<!<\/pre>)\n(?!<pre)/g, match => '<br>');
+      return html;
+    },
+
+    isLongBody(entry) {
+      return entry.body && entry.body.split('\n').length > 5;
+    },
+
+    toggleExpand(id) {
+      this.expandedEntries[id] = !this.expandedEntries[id];
+    },
+
+    async copyBody(entry) {
+      try {
+        await navigator.clipboard.writeText(entry.body);
+        this.copiedId = entry.id;
+        setTimeout(() => { this.copiedId = null; }, 1500);
+      } catch {}
+    },
+
+    agentById(id) {
+      return this.allAgents.find(a => a.id === id) || null;
+    },
+
+    // ── Add project modal ──
+    openAddProject() {
+      this.addProjectModal = {
+        open: true, name: '', root_dir: '', prefix: 'ENTRY', id: '', color: '#3b9eff',
+        agent_ids: [...(this.config.ai_tools || [])],
+        annotations: {}, activeTab: this.config.ai_tools?.[0] || '',
+        autoWrite: this.config.auto_write_agent_config !== false,
+        migrate_from: null, legacyAgents: [],
+      };
+      this.generateModalAnnotations();
+    },
+
+    toggleModalAgent(agentId) {
+      const idx = this.addProjectModal.agent_ids.indexOf(agentId);
+      if (idx === -1) {
+        this.addProjectModal.agent_ids.push(agentId);
+        if (!this.addProjectModal.activeTab) this.addProjectModal.activeTab = agentId;
+      } else {
+        this.addProjectModal.agent_ids.splice(idx, 1);
+        if (this.addProjectModal.activeTab === agentId)
+          this.addProjectModal.activeTab = this.addProjectModal.agent_ids[0] || '';
+      }
+      this.generateModalAnnotations();
+    },
+
+    generateModalAnnotations() {
+      const proj = {
+        id: this.addProjectModal.id || this.addProjectModal.prefix.toLowerCase(),
+        name: this.addProjectModal.name || 'My Project',
+        prefix: this.addProjectModal.prefix || 'ENTRY',
+      };
+      this.addProjectModal.agent_ids.forEach(aid => {
+        if (!this.addProjectModal.annotations[aid]) {
+          this.addProjectModal.annotations[aid] = this._buildAnnotation(aid, proj);
+        }
+      });
+    },
+
+    async scanProjectAgents() {
+      if (!this.addProjectModal.root_dir.trim()) return;
+      const data = await fetch('/api/projects/scan-dir', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ root_dir: this.addProjectModal.root_dir }),
+      }).then(r => r.json()).catch(() => ({ found_agent_ids: [] }));
+      this.addProjectModal.legacyAgents = data.legacy_agent_ids || [];
+      if (data.found_agent_ids?.length) {
+        data.found_agent_ids.forEach(aid => {
+          if (!this.addProjectModal.agent_ids.includes(aid))
+            this.addProjectModal.agent_ids.push(aid);
+        });
+        if (!this.addProjectModal.activeTab)
+          this.addProjectModal.activeTab = this.addProjectModal.agent_ids[0] || '';
+        this.generateModalAnnotations();
+      }
+    },
+
+    legacyAgentNames() {
+      return this.addProjectModal.legacyAgents
+        .map(aid => this.agentById(aid)?.config_file || aid)
+        .join(', ');
+    },
+
+    async submitAddProject() {
+      const m = this.addProjectModal;
+      if (!m.name.trim() || !m.root_dir.trim()) return;
+      const projectId = m.id.trim() || m.prefix.toLowerCase();
+      const payload = {
+        id: projectId, name: m.name, root_dir: m.root_dir,
+        prefix: m.prefix.toUpperCase(), color: m.color,
+        agent_ids: m.autoWrite ? m.agent_ids : [],
+        auto_write: m.autoWrite,
+        migrate_from: m.migrate_from || null,
+      };
+      const resp = await fetch('/api/projects', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).then(r => r.json()).catch(() => null);
+      if (resp?.ok) {
+        m.open = false;
+        await this.loadProjects();
+        this.activeProjectId = projectId;
+        await this.loadEntries();
+      }
+    },
+
+    // ── Add custom agent ──
+    async submitAddAgent() {
+      const m = this.addAgentModal;
+      if (!m.name.trim() || !m.config_file.trim()) return;
+      const resp = await fetch('/api/agents', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: m.name, config_file: m.config_file, template: m.template }),
+      }).then(r => r.json()).catch(() => null);
+      if (resp?.ok) {
+        await this.loadAgents();
+        m.open = false;
+        // Auto-select in current contexts
+        if (this.onboarding && !this.onbSelectedAgents.includes(resp.agent.id))
+          this.onbSelectedAgents.push(resp.agent.id);
+        if (this.addProjectModal.open && !this.addProjectModal.agent_ids.includes(resp.agent.id))
+          this.addProjectModal.agent_ids.push(resp.agent.id);
+      }
+    },
+
+    async deleteLearnedAgent(agentId) {
+      await fetch(`/api/agents/${agentId}`, { method: 'DELETE' });
+      await this.loadAgents();
+    },
+
+    async toggleGlobalAgent(agentId, checked) {
+      const tools = [...(this.config.ai_tools || [])];
+      if (checked && !tools.includes(agentId)) tools.push(agentId);
+      if (!checked) tools.splice(tools.indexOf(agentId), 1);
+      this.config.ai_tools = tools;
+      await fetch('/api/config', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ai_tools: tools }),
+      });
+    },
+
+    async toggleProjectAgent(agentId, checked) {
+      if (!this.activeProject) return;
+      const current = [...(this.activeProject.active_agents || [])];
+      if (checked && !current.includes(agentId)) current.push(agentId);
+      if (!checked) current.splice(current.indexOf(agentId), 1);
+      await fetch(`/api/projects/${this.activeProject.id}/agents`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent_ids: current, auto_write: this.config.auto_write_agent_config }),
+      });
+      await this.loadProjects();
+    },
+
+    async saveConfig() {
+      await fetch('/api/config', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ auto_write_agent_config: this.config.auto_write_agent_config }),
+      });
+    },
+
+    // ── Onboarding ──
+    toggleOnbAgent(agentId) {
+      const idx = this.onbSelectedAgents.indexOf(agentId);
+      if (idx === -1) {
+        this.onbSelectedAgents.push(agentId);
+        if (!this.onbAnnotationTab) this.onbAnnotationTab = agentId;
+      } else {
+        this.onbSelectedAgents.splice(idx, 1);
+        if (this.onbAnnotationTab === agentId)
+          this.onbAnnotationTab = this.onbSelectedAgents[0] || '';
+      }
+      this.generateOnbAnnotations();
+    },
+
+    generateOnbAnnotations() {
+      const proj = { id: 'myproject', name: 'My Project', prefix: 'ENTRY' };
+      this.onbSelectedAgents.forEach(aid => {
+        if (!this.onbAnnotations[aid])
+          this.onbAnnotations[aid] = this._buildAnnotation(aid, proj);
+      });
+      if (!this.onbAnnotationTab && this.onbSelectedAgents.length)
+        this.onbAnnotationTab = this.onbSelectedAgents[0];
+    },
+
+    _buildAnnotation(agentId, proj) {
+      const agent = this.agentById(agentId);
+      if (!agent) return '';
+      const sm = agent.start_marker, em = agent.end_marker;
+      const eid = `${proj.prefix}-0039`;
+      const cli = `python <entrybox>/cli/entrybox.py update-state --project ${proj.id} --id ${eid} --state wip`;
+      if (agent.template === 'markdown') {
+        return [
+          sm,
+          '## EntryBox',
+          '',
+          'This project tracks ideas, fixes, and feedback in EntryBox.',
+          'Entries live in `.entrybox/entries.md` (plain markdown, read it directly).',
+          `Project: ${proj.name} | Prefix: ${proj.prefix} | Server: http://localhost:3859`,
+          '',
+          '### When the user references an entry',
+          '',
+          `If the user says "check EntryBox ${eid}", "look at entry 39", or`,
+          `"let's work on the entrybox idea about X":`,
+          '',
+          '1. Find it. Read `.entrybox/entries.md` and match the ID. A bare',
+          `   number like "39" means \`${eid}\` (zero-padded, with the prefix).`,
+          '2. Set the state to `review` so the user sees you picked it up.',
+          '3. Read the title and body. Think through scope and approach.',
+          '4. Surface it back: a short summary of the entry and your proposed',
+          '   approach, then ask for a go-ahead. Do not start work yet.',
+          '5. Once the user confirms, set `wip` and do the work.',
+          '6. Set `done` when finished. If blocked, set `error` and say what',
+          '   blocks it.',
+          '',
+          '### Setting state',
+          '',
+          `CLI: ${cli}`,
+          `API: PATCH http://localhost:3859/api/projects/${proj.id}/entries  {"id": "${eid}", "state": "wip"}`,
+          '',
+          'States: logged, review, wip, done, error.',
+          em,
+        ].join('\n');
+      } else {
+        return [
+          sm,
+          '# Tracks ideas, fixes, feedback. Entries: .entrybox/entries.md (read directly).',
+          `# Project: ${proj.name} | Prefix: ${proj.prefix} | Server: http://localhost:3859`,
+          '#',
+          `# When the user references an entry (e.g. "check EntryBox ${eid}"):`,
+          `#  1. Find it in .entrybox/entries.md. "39" means ${eid}.`,
+          '#  2. Set state `review` so the user sees you picked it up.',
+          '#  3. Read it. Think through the approach.',
+          '#  4. Summarise it to the user and ask for a go-ahead. Do not start yet.',
+          '#  5. On confirmation set `wip`, do the work.',
+          '#  6. Set `done` when finished, or `error` if blocked.',
+          `# Set state: ${cli}`,
+          em,
+        ].join('\n');
+      }
+    },
+
+    goToSlide(i) { this.onbSlide = i; },
+    nextSlide() { if (this.onbSlide < 8) this.onbSlide++; },
+    prevSlide() { if (this.onbSlide > 0) this.onbSlide--; },
+
+    async skipOnboarding() {
+      await this._finishOnbConfig();
+      this.onboarding = false;
+    },
+
+    async finishOnboarding() {
+      await this._finishOnbConfig();
+      this.onboarding = false;
+    },
+
+    async _finishOnbConfig() {
+      this.config.ai_tools = [...this.onbSelectedAgents];
+      this.config.auto_write_agent_config = this.onbAutoWrite;
+      await fetch('/api/config', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          onboarded: true,
+          booted: !this.showIntroOnLaunch,
+          ai_tools: this.onbSelectedAgents,
+          auto_write_agent_config: this.onbAutoWrite,
+        }),
+      });
+    },
+
+    async resetIntro() {
+      await fetch('/api/config', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ booted: false, onboarded: false }),
+      });
+      location.reload();
+    },
+
+    // keyboard navigation for onboarding
+    _handleKey(e) {
+      if (!this.onboarding) return;
+      if (e.key === 'ArrowRight') this.nextSlide();
+      if (e.key === 'ArrowLeft') this.prevSlide();
+    },
+  };
+}
+
+document.addEventListener('keydown', e => {
+  const app = document.querySelector('[x-data]').__x?.$data;
+  if (app) app._handleKey(e);
+});
+</script>
+
+</body>
+</html>

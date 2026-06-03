@@ -1,0 +1,29 @@
+{
+  "name": "Minimal",
+  "author": "EntryBox",
+  "vars": {
+    "--bg": "#fafafa",
+    "--surface": "#ffffff",
+    "--surface2": "#f4f4f4",
+    "--text": "#111111",
+    "--text2": "#888888",
+    "--accent": "#111111",
+    "--border": "#e8e8e8",
+    "--radius": "2px",
+    "--font": "Georgia, 'Times New Roman', serif",
+    "--font-mono": "ui-monospace, monospace",
+    "--shadow": "none",
+    "--type-fix": "#cc3333",
+    "--type-improve": "#336633",
+    "--type-docs": "#333399",
+    "--type-idea": "#cc6600",
+    "--type-roadmap": "#663399",
+    "--state-logged": "#aaaaaa",
+    "--state-review": "#cc8800",
+    "--state-wip": "#3366cc",
+    "--state-done": "#336633",
+    "--state-error": "#cc3333",
+    "--red": "#cc3333",
+    "--green": "#336633"
+  }
+}

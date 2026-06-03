@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="48" viewBox="0 0 220 48" fill="none" color="#cfd3d8" role="img" aria-label="EntryBox">
+  <title>EntryBox</title>
+  <!-- mark: diamond-in-diamond (matches the in-app ◈), scaled to 70% -->
+  <path d="M24 10 L38 24 L24 38 L10 24 Z" fill="none" stroke="#3b9eff" stroke-width="1.75" stroke-linejoin="round"/>
+  <path d="M24 17.7 L30.3 24 L24 30.3 L17.7 24 Z" fill="#3b9eff"/>
+  <!-- wordmark: "Entry" inherits currentColor (theme text), "Box" is the accent -->
+  <text x="58" y="32" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="24" font-weight="700">
+    <tspan fill="currentColor">Entry</tspan><tspan fill="#3b9eff">Box</tspan>
+  </text>
+</svg>

@@ -1,0 +1,29 @@
+{
+  "name": "Dark",
+  "author": "EntryBox",
+  "vars": {
+    "--bg": "#0d0d0d",
+    "--surface": "#1a1a1a",
+    "--surface2": "#222222",
+    "--text": "#e8e8e8",
+    "--text2": "#999999",
+    "--accent": "#3b9eff",
+    "--border": "#2a2a2a",
+    "--radius": "6px",
+    "--font": "system-ui, -apple-system, sans-serif",
+    "--font-mono": "ui-monospace, 'Cascadia Code', monospace",
+    "--shadow": "0 2px 8px rgba(0,0,0,0.4)",
+    "--type-fix": "#ff6b6b",
+    "--type-improve": "#6bcb77",
+    "--type-docs": "#74b3ff",
+    "--type-idea": "#ffb347",
+    "--type-roadmap": "#c084fc",
+    "--state-logged": "#666666",
+    "--state-review": "#f4c430",
+    "--state-wip": "#3b9eff",
+    "--state-done": "#6bcb77",
+    "--state-error": "#ff6b6b",
+    "--red": "#ff6b6b",
+    "--green": "#6bcb77"
+  }
+}

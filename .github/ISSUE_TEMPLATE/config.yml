@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or discussion
+    url: https://github.com/<your-org>/entrybox/discussions
+    about: Ask a question or discuss an idea before opening an issue.
+  - name: Security report
+    url: https://github.com/<your-org>/entrybox/blob/main/SECURITY.md
+    about: Do not file security issues publicly. See the security policy.
+  - name: Contact the maintainer
+    url: mailto:dev@izo.red
+    about: Reach DIR (dev.izo.red) directly.

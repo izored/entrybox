@@ -1,0 +1,9 @@
+# EntryBox funding configuration.
+#
+# TODO: a donation / sponsorship method is not finalized yet.
+# Uncomment and fill the relevant line once a platform is chosen, then this
+# panel appears as a "Sponsor" button on the GitHub repo.
+#
+# github: [izored]
+# ko_fi: <username>
+# custom: ["https://dev.izo.red"]

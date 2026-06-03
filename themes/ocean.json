@@ -1,0 +1,29 @@
+{
+  "name": "Ocean",
+  "author": "EntryBox",
+  "vars": {
+    "--bg": "#0a1628",
+    "--surface": "#0f2040",
+    "--surface2": "#142850",
+    "--text": "#cce4ff",
+    "--text2": "#7aabcc",
+    "--accent": "#00aaff",
+    "--border": "#1a3a5c",
+    "--radius": "8px",
+    "--font": "system-ui, -apple-system, sans-serif",
+    "--font-mono": "ui-monospace, 'Cascadia Code', monospace",
+    "--shadow": "0 2px 12px rgba(0,100,200,0.2)",
+    "--type-fix": "#ff7b7b",
+    "--type-improve": "#5dde7a",
+    "--type-docs": "#5ab4ff",
+    "--type-idea": "#ffcc55",
+    "--type-roadmap": "#cc88ff",
+    "--state-logged": "#557799",
+    "--state-review": "#f0c040",
+    "--state-wip": "#00aaff",
+    "--state-done": "#5dde7a",
+    "--state-error": "#ff7b7b",
+    "--red": "#ff7b7b",
+    "--green": "#5dde7a"
+  }
+}

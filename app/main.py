@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app import __version__
 from app.config import BIND_HOST
-from app.routes import entries, projects, agents, themes, config as config_router
+from app.routes import entries, projects, agents, themes, files, config as config_router
 
 BASE_DIR = Path(__file__).parent
 logger = logging.getLogger("entrybox")
@@ -35,6 +35,7 @@ app.include_router(entries.router)
 app.include_router(projects.router)
 app.include_router(agents.router)
 app.include_router(themes.router)
+app.include_router(files.router)
 app.include_router(config_router.router)
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")

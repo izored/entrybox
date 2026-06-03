@@ -325,7 +325,8 @@
           </div>
 
           <!-- Log form -->
-          <div class="card card-accent" style="margin-bottom:16px">
+          <div class="card card-accent" style="margin-bottom:16px"
+               @drop.prevent="handleDrop($event,'log')" @dragover.prevent>
             <div style="font-size:12px;font-weight:600;margin-bottom:10px" x-show="!embed">Log New Entry</div>
             <div class="log-row">
               <input type="text" x-model="logForm.title" placeholder="Short title: what's the entry?"
@@ -338,13 +339,22 @@
                 <option value="roadmap">🟣 roadmap</option>
               </select>
             </div>
-            <textarea x-model="logForm.body" placeholder="Optional: describe it. Why it matters, how it should work, what you observed…"
+            <textarea x-model="logForm.body" @paste="handlePaste($event,'log')"
+                      placeholder="Optional: describe it. Paste or drop a screenshot or file to attach it…"
                       rows="3" style="margin-bottom:10px"></textarea>
             <div style="display:flex;align-items:center;gap:10px">
               <button class="btn btn-primary" @click="submitEntry()" :disabled="!logForm.title.trim() || logForm.saving">
                 + Log Entry
               </button>
-              <span class="saved-badge" x-show="logForm.saved" x-transition>✓ saved</span>
+              <input type="file" multiple x-ref="logFile" style="display:none"
+                     @change="_uploadList($event.target.files,'log'); $event.target.value=''">
+              <button class="btn btn-ghost btn-sm" @click="$refs.logFile.click()" :disabled="attaching"
+                      title="Attach a screenshot or file">📎 Attach</button>
+              <span class="text-muted text-sm" x-show="attaching" x-cloak>uploading…</span>
+              <span class="saved-badge" x-show="lastLogged" x-transition x-cloak>
+                ✓ logged <span x-text="lastLogged?.id"></span>
+                <button class="body-toggle" style="margin-left:6px;display:inline" @click="undoLog()">undo</button>
+              </span>
             </div>
           </div>
 
@@ -405,13 +415,19 @@
                     <option value="roadmap">🟣 roadmap</option>
                   </select>
                 </div>
-                <textarea x-model="editForm.body" rows="3"
-                          placeholder="Optional: describe it. Why it matters, how it should work…"></textarea>
+                <textarea x-model="editForm.body" rows="3" @paste="handlePaste($event,'edit')"
+                          @drop.prevent="handleDrop($event,'edit')" @dragover.prevent
+                          placeholder="Optional: describe it. Paste or drop a screenshot or file to attach it…"></textarea>
                 <div style="display:flex;align-items:center;gap:10px">
                   <button class="btn btn-primary btn-sm" @click="saveEdit(entry)"
                           :disabled="!editForm.title.trim() || editForm.saving"
                           x-text="editForm.saving ? 'Saving…' : 'Save'"></button>
                   <button class="btn btn-ghost btn-sm" @click="cancelEdit()">Cancel</button>
+                  <input type="file" multiple x-ref="editFile" style="display:none"
+                         @change="_uploadList($event.target.files,'edit'); $event.target.value=''">
+                  <button class="btn btn-ghost btn-sm" @click="$refs.editFile.click()" :disabled="attaching"
+                          title="Attach a screenshot or file">📎</button>
+                  <span class="text-muted text-sm" x-show="attaching" x-cloak>uploading…</span>
                 </div>
               </div>
 
@@ -704,6 +720,9 @@ function entrybox() {
     copiedId: null,
     editingId: null,
     editForm: { title: '', body: '', type: 'idea', saving: false },
+    attaching: false,
+    lastLogged: null,
+    _undoTimer: null,
 
     // Brand
     logoSvg: '',
@@ -930,15 +949,35 @@ function entrybox() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: this.logForm.title, body: this.logForm.body, type: this.logForm.type }),
       }).then(r => r.json()).catch(() => null);
+      const sent = { title: this.logForm.title, body: this.logForm.body, type: this.logForm.type };
       this.logForm = { title: '', body: '', type: 'idea', saving: false, saved: true };
       if (res?.id) {
         this.entries.unshift({ id: res.id, timestamp: res.timestamp, type: res.type,
           state: res.state, done_at: res.done_at ?? null, title: res.title, body: res.body ?? '' });
         this.entriesTotal++;
+        // Undo window: keep the just-logged entry recallable for a few seconds.
+        this.lastLogged = { ...sent, id: res.id };
+        clearTimeout(this._undoTimer);
+        this._undoTimer = setTimeout(() => { this.lastLogged = null; }, 8000);
       } else {
         await this.loadEntries();
       }
-      setTimeout(() => { this.logForm.saved = false; }, 2000);
+    },
+
+    // Undo a just-logged entry: remove it and restore its content to the form.
+    async undoLog() {
+      const last = this.lastLogged;
+      if (!last) return;
+      clearTimeout(this._undoTimer);
+      this.lastLogged = null;
+      const idx = this.entries.findIndex(e => e.id === last.id);
+      if (idx !== -1) this.entries.splice(idx, 1);
+      this.entriesTotal = Math.max(0, this.entriesTotal - 1);
+      this.logForm = { title: last.title, body: last.body, type: last.type, saving: false, saved: false };
+      await fetch(`/api/projects/${this.activeProject.id}/entries`, {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: last.id }),
+      }).catch(() => {});
     },
 
     async updateState(entry, newState) {
@@ -1100,6 +1139,58 @@ function entrybox() {
       if (!this.activeProject) return label;
       const l = label.replace(/&/g, '&amp;').replace(/</g, '&lt;');
       return `<a href="${this._attUrl(path)}" target="_blank" class="att-file">📎 ${l}</a>`;
+    },
+
+    // ── Attachments (paste / drop / file picker → upload → insert body ref) ──
+    _isImg(name) { return /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(name || ''); },
+
+    _fileToDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+    },
+
+    async uploadAttachment(file) {
+      if (!this.activeProject) return null;
+      this.attaching = true;
+      try {
+        const dataUrl = await this._fileToDataUrl(file);
+        const name = file.name || `paste-${Date.now()}.png`;
+        const res = await fetch(`/api/projects/${this.activeProject.id}/attachments`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: name, data: dataUrl }),
+        }).then(r => r.json()).catch(() => null);
+        if (!res?.ok) { this.showToast(res?.error ? `Attach failed: ${res.error}` : 'Attach failed'); return null; }
+        return res;
+      } finally { this.attaching = false; }
+    },
+
+    _insertRef(field, md) {
+      const key = field === 'edit' ? 'editForm' : 'logForm';
+      this[key].body = (this[key].body ? this[key].body.replace(/\s*$/, '') + '\n' : '') + md + '\n';
+    },
+
+    async _uploadList(files, field) {
+      for (const file of Array.from(files || [])) {
+        const res = await this.uploadAttachment(file);
+        if (res) this._insertRef(field, (this._isImg(res.name) ? '!' : '') + `[${res.name}](${res.ref})`);
+      }
+    },
+
+    async handlePaste(ev, field) {
+      const items = ev.clipboardData && ev.clipboardData.items;
+      if (!items) return;
+      const files = [];
+      for (const it of items) if (it.kind === 'file') { const f = it.getAsFile(); if (f) files.push(f); }
+      if (files.length) { ev.preventDefault(); await this._uploadList(files, field); }
+    },
+
+    async handleDrop(ev, field) {
+      const files = ev.dataTransfer && ev.dataTransfer.files;
+      if (files && files.length) { await this._uploadList(files, field); }
     },
 
     isLongBody(entry) {

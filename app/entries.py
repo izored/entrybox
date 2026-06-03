@@ -261,14 +261,37 @@ def update_entry(entries_file: Path, prefix: str, entry_id: str,
     return updated
 
 
+def _reap_attachments(entrybox_dir: Path, block_text: str) -> None:
+    """Delete attachment files referenced by a removed entry block. Best-effort,
+    sandboxed to the project's .entrybox/attachments dir."""
+    try:
+        att_dir = (entrybox_dir / "attachments").resolve()
+    except (OSError, RuntimeError):
+        return
+    for ref in set(re.findall(r"attachments/([A-Za-z0-9._-]+)", block_text)):
+        target = (att_dir / ref).resolve()
+        try:
+            target.relative_to(att_dir)
+        except ValueError:
+            continue
+        if target.is_file():
+            try:
+                target.unlink()
+            except OSError:
+                pass
+
+
 def delete_entry(entries_file: Path, prefix: str, entry_id: str) -> bool:
     if not entries_file.exists():
         return False
     with _lock(entries_file):
         text = entries_file.read_text(encoding="utf-8", errors="replace")
         pattern = rf"\n## {re.escape(entry_id)} · [\s\S]*?(?=\n## (?:{re.escape(prefix)}-\d+|\d{{4}}-\d{{2}}-\d{{2}})|\Z)"
+        m = re.search(pattern, text)
         new_text = re.sub(pattern, "", text)
         if new_text == text:
             return False
         _write_atomic(entries_file, new_text)
+        if m:
+            _reap_attachments(entries_file.parent, m.group(0))
     return True

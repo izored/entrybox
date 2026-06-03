@@ -12,3 +12,4 @@ quickdrop.log
 .entrybox/*.bak
 .entrybox/*.tmp
 server_3860.log
+.entrybox/attachments/

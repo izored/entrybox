@@ -24,6 +24,13 @@
     "--state-done": "#5dde7a",
     "--state-error": "#ff7b7b",
     "--red": "#ff7b7b",
-    "--green": "#5dde7a"
+    "--green": "#5dde7a",
+    "--code-text": "var(--text)",
+    "--code-keyword": "var(--type-roadmap)",
+    "--code-string": "var(--type-improve)",
+    "--code-comment": "var(--text2)",
+    "--code-number": "var(--type-idea)",
+    "--code-function": "var(--type-docs)",
+    "--code-builtin": "var(--accent)"
   }
 }

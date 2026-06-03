@@ -88,6 +88,23 @@ body.embed #content { padding: 12px; height: 100vh; overflow-y: auto; }
 .inline-code { background: var(--surface2); border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; }
 .path-token, .url-token { color: var(--accent); font-family: var(--font-mono); font-size: 11px; }
 
+/* ── Syntax highlighting: highlight.js classes → theme code-token vars ── */
+.entry-body .hljs { color: var(--code-text); background: transparent; padding: 0; }
+.hljs-comment, .hljs-quote { color: var(--code-comment); font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-name, .hljs-tag { color: var(--code-keyword); }
+.hljs-string, .hljs-attr, .hljs-symbol, .hljs-bullet, .hljs-template-tag, .hljs-regexp, .hljs-addition { color: var(--code-string); }
+.hljs-number, .hljs-literal, .hljs-type, .hljs-params { color: var(--code-number); }
+.hljs-title, .hljs-section, .hljs-selector-id, .hljs-selector-class { color: var(--code-function); }
+.hljs-meta, .hljs-deletion, .hljs-doctag, .hljs-variable { color: var(--code-builtin); }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 700; }
+
+/* ── Attachments in entry bodies ── */
+.att-img { max-width: 100%; max-height: 360px; border: 1px solid var(--border); border-radius: var(--radius); display: block; margin: 6px 0; }
+.att-img-link { display: inline-block; }
+.att-file { color: var(--accent); text-decoration: none; font-size: 12px; }
+.att-file:hover { text-decoration: underline; }
+
 /* ── Entry body wrap (copy + collapse) ── */
 .entry-body-wrap { position: relative; }
 .entry-body-wrap:hover .body-copy { opacity: 1; }

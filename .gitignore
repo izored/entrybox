@@ -11,3 +11,4 @@ quickdrop.log
 .quickdrop_state.json
 .entrybox/*.bak
 .entrybox/*.tmp
+server_3860.log

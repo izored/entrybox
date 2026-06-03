@@ -24,6 +24,13 @@
     "--state-done": "#336633",
     "--state-error": "#cc3333",
     "--red": "#cc3333",
-    "--green": "#336633"
+    "--green": "#336633",
+    "--code-text": "var(--text)",
+    "--code-keyword": "var(--type-roadmap)",
+    "--code-string": "var(--type-improve)",
+    "--code-comment": "var(--text2)",
+    "--code-number": "var(--type-idea)",
+    "--code-function": "var(--type-docs)",
+    "--code-builtin": "var(--accent)"
   }
 }

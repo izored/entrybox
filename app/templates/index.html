@@ -7,6 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
   <link rel="stylesheet" href="/static/style.css">
   <style id="eb-theme">/* theme vars injected at runtime */</style>
+  <script defer src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
 <body x-data="entrybox()" x-init="init()" :class="embed ? 'embed' : ''">
@@ -1033,24 +1034,72 @@ function entrybox() {
       } catch { return ts; }
     },
 
+    // Ordered render pipeline. Code/attachments are pulled out of the RAW text
+    // first (stashed as placeholder tokens), so escaping + inline formatting can
+    // never touch their content, and the highlighter receives raw source. Then
+    // the remaining text is HTML-escaped, formatted, and the stashed fragments
+    // are restored. Escape-first everywhere = XSS-safe.
     renderBody(text) {
       if (!text) return '';
       const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      // fenced code blocks
-      let html = esc(text).replace(/```[\w]*\n?([\s\S]*?)```/g, (_, code) =>
-        `<pre><code>${code.trimEnd()}</code></pre>`);
-      // inline code (operate on non-pre parts only via split trick)
-      html = html.replace(/`([^`\n]+)`/g, '<code class="inline-code">$1</code>');
-      // bold
+      const slots = [];
+      const stash = frag => `\u0000${slots.push(frag) - 1}\u0000`;
+      let s = text;
+
+      // 1. Fenced code blocks: raw source → syntax-highlighted (graceful if hljs absent).
+      s = s.replace(/```([\w+#.-]*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+        const raw = code.replace(/\n$/, '');
+        let inner;
+        if (window.hljs) {
+          try {
+            const r = (lang && hljs.getLanguage(lang))
+              ? hljs.highlight(raw, { language: lang, ignoreIllegals: true })
+              : hljs.highlightAuto(raw);
+            inner = `<code class="hljs">${r.value}</code>`;
+          } catch (e) { inner = `<code>${esc(raw)}</code>`; }
+        } else {
+          inner = `<code>${esc(raw)}</code>`;
+        }
+        return stash(`<pre>${inner}</pre>`);
+      });
+
+      // 2. Inline code.
+      s = s.replace(/`([^`\n]+)`/g, (_, code) => stash(`<code class="inline-code">${esc(code)}</code>`));
+
+      // 3. Attachment refs: ![alt](attachments/x.png) → image; [label](attachments/x.log) → file link.
+      s = s.replace(/!\[([^\]]*)\]\((attachments\/[^)\s]+)\)/g, (_, alt, p) => stash(this._attachmentImg(p, alt)));
+      s = s.replace(/\[([^\]]+)\]\((attachments\/[^)\s]+)\)/g, (_, label, p) => stash(this._attachmentLink(p, label)));
+
+      // 4. Escape the remaining prose.
+      let html = esc(s);
+
+      // 5. Bold, URLs, filesystem paths.
       html = html.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
-      // URLs
       html = html.replace(/(https?:\/\/[^\s<"]+)/g, '<span class="url-token">$1</span>');
-      // paths: ./foo, ../foo, /foo/bar, C:\foo, src/foo/bar (must contain / or \)
       html = html.replace(/(?<![`\w])((?:[A-Za-z]:[\\/]|\.{1,2}[\\/]|\/)[^\s<"'`*,;]+|(?:[\w.-]+\/)+[\w.-]+(?:\/)?)/g,
         '<span class="path-token">$1</span>');
-      // newlines outside pre blocks
-      html = html.replace(/(?<!<\/pre>)\n(?!<pre)/g, match => '<br>');
+
+      // 6. Newlines → <br> (stash tokens are single chars, untouched).
+      html = html.replace(/\n/g, '<br>');
+
+      // 7. Restore stashed fragments, and drop <br> hugging block-level ones.
+      html = html.replace(/(?:<br>)?\u0000(\d+)\u0000(?:<br>)?/g, (_, i) => slots[+i]);
       return html;
+    },
+
+    _attUrl(path) {
+      return `/api/projects/${this.activeProject.id}/file?path=${encodeURIComponent('.entrybox/' + path)}`;
+    },
+    _attachmentImg(path, alt) {
+      if (!this.activeProject) return alt;
+      const a = alt.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+      const url = this._attUrl(path);
+      return `<a href="${url}" target="_blank" class="att-img-link"><img class="att-img" src="${url}" alt="${a}" loading="lazy"></a>`;
+    },
+    _attachmentLink(path, label) {
+      if (!this.activeProject) return label;
+      const l = label.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+      return `<a href="${this._attUrl(path)}" target="_blank" class="att-file">📎 ${l}</a>`;
     },
 
     isLongBody(entry) {

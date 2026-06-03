@@ -9,3 +9,5 @@ data/*.lock
 
 quickdrop.log
 .quickdrop_state.json
+.entrybox/*.bak
+.entrybox/*.tmp

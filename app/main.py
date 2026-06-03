@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from app import __version__
 from app.routes import entries, projects, agents, themes, config as config_router
 
 BASE_DIR = Path(__file__).parent
@@ -27,7 +28,7 @@ app.mount("/assets", StaticFiles(directory=BASE_DIR.parent / "assets"), name="as
 
 @app.get("/health", include_in_schema=False)
 async def health():
-    return JSONResponse({"status": "ok", "version": "1.0.0"})
+    return JSONResponse({"status": "ok", "version": __version__})
 
 _INDEX = BASE_DIR / "templates" / "index.html"
 _QUICK = BASE_DIR / "templates" / "quick.html"

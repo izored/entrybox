@@ -1,5 +1,7 @@
 import logging
+import os
 import re
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -48,6 +50,20 @@ def _pad_ts(ts: str | None) -> str | None:
     if ts and re.fullmatch(r"\d{4}-\d{2}-\d{2}", ts.strip()):
         return ts.strip() + " 00:00"
     return ts
+
+
+def _write_atomic(path: Path, text: str, backup: bool = False) -> None:
+    """Write via temp-file + atomic rename so a crash mid-write can't truncate
+    the entries file. With backup=True, snapshot the prior contents to
+    `<file>.bak` first (used for the automatic, unattended migration rewrite)."""
+    if backup and path.exists():
+        try:
+            shutil.copy2(path, path.with_name(path.name + ".bak"))
+        except OSError:
+            pass
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def _parse_block(block: str, prefix: str) -> dict | None:
@@ -128,7 +144,17 @@ def load_entries(entries_file: Path, prefix: str) -> list[dict]:
 
     preamble, entries = _parse_file(entries_file, prefix)
 
-    needs_rewrite = any(e["id"] is None for e in entries)
+    # Duplicate-ID detection: two blocks sharing an ID must be repaired, else the
+    # UI sees colliding keys and update/delete can target the wrong block.
+    seen_ids: set[str] = set()
+    has_dupes = False
+    for e in entries:
+        if e["id"] is not None:
+            if e["id"] in seen_ids:
+                has_dupes = True
+            seen_ids.add(e["id"])
+
+    needs_rewrite = has_dupes or any(e["id"] is None for e in entries)
     if not needs_rewrite:
         text = entries_file.read_text(encoding="utf-8", errors="replace")
         needs_rewrite = not re.search(rf"## {re.escape(prefix)}-\d+ · .+ · \w+ · \w+ — ", text)
@@ -138,15 +164,22 @@ def load_entries(entries_file: Path, prefix: str) -> list[dict]:
         # the parsed entries, so a malformed/dropped block can't recycle a number.
         raw = entries_file.read_text(encoding="utf-8", errors="replace")
         existing_ids = re.findall(rf"{re.escape(prefix)}-\d+", raw)
+        assigned: set[str] = set()
         for entry in entries:
-            if entry["id"] is None:
+            eid = entry["id"]
+            if eid is None or eid in assigned:
+                # Missing ID, or a duplicate of one already kept → fresh ID. The
+                # earliest occurrence keeps the number; later collisions move.
+                if eid is not None:
+                    logger.warning("entrybox: duplicate id %s in %s — reassigning", eid, entries_file)
                 entry["id"] = _next_id(existing_ids, prefix)
                 existing_ids.append(entry["id"])
+            assigned.add(entry["id"])
             # Self-heal: normalise any date-only stamps while we're rewriting.
             entry["timestamp"] = _pad_ts(entry["timestamp"])
             entry["done_at"] = _pad_ts(entry["done_at"])
         body_text = "\n".join(_entry_text(e) for e in entries)
-        entries_file.write_text(preamble.rstrip("\n") + "\n\n" + body_text, encoding="utf-8")
+        _write_atomic(entries_file, preamble.rstrip("\n") + "\n\n" + body_text, backup=True)
         mtime = entries_file.stat().st_mtime
 
     _cache[key] = (mtime, entries)
@@ -191,7 +224,7 @@ def update_entry_state(entries_file: Path, prefix: str, entry_id: str, new_state
             entry["done_at"] = None
             replacement = rf"\1 · {new_state} —"
         new_text = re.sub(pattern, replacement, text)
-        entries_file.write_text(new_text, encoding="utf-8")
+        _write_atomic(entries_file, new_text)
     return entry, old_state
 
 
@@ -223,7 +256,7 @@ def update_entry(entries_file: Path, prefix: str, entry_id: str,
                 break
         if updated is None:
             return None
-        entries_file.write_text("\n".join(blocks), encoding="utf-8")
+        _write_atomic(entries_file, "\n".join(blocks))
         _cache.pop(str(entries_file), None)
     return updated
 
@@ -237,5 +270,5 @@ def delete_entry(entries_file: Path, prefix: str, entry_id: str) -> bool:
         new_text = re.sub(pattern, "", text)
         if new_text == text:
             return False
-        entries_file.write_text(new_text, encoding="utf-8")
+        _write_atomic(entries_file, new_text)
     return True

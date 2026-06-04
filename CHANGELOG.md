@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.5.1] - 2026-06-04
+
+> _Status: planned — build starts 2026-06-04. Items below are the spec; code not yet written._
+
+### Also queued for this session (after 1.5.1)
+
+- **N6** file-tree UI + file-scoped entries (backend already built in v1.5.0)
+- **N4** Chrome extension (MV3: popup, context-menu, screenshot→attachment)
+- **N5** companion app + quick.html refresh (paste attach, undo, capture-contract parity)
+- **N2** per-project custom types + broadened positioning / copy
+- **P3** search / filter bar
+- **P4** resurfacing / snooze (stale-badge + saved filter)
+- **P6** resolution link on done (commit / PR / file ref)
+
+### Added
+
+- Priority, due date, and recurrence fields on entries. The header stores
+  optional `· pri:A · due:2026-06-10 · recur:weekly` segments; all three fields
+  are optional and backward-compatible (old entries parse with `null` values).
+  Priority is A/B/C (A = urgent). Recurrence values: `daily`, `weekly`,
+  `monthly`, `yearly`.
+- Priority and due date badges on entry cards. Priority uses urgency colors
+  (A = red, B = orange, C = green). Due badge adapts: overdue shows a ⚠ prefix
+  in red, today shows "due today", tomorrow shows "due tomorrow", future shows
+  the date string in a dimmed style. All colors come from existing theme CSS vars
+  — no hardcoded values added.
+- Recurrence indicator (↺) on cards with a tooltip naming the recur interval.
+- Priority, due date, and recur controls in the log form and inline edit form.
+- Auto-re-log on done: when a recurring entry is marked `done`, EntryBox creates
+  the next occurrence immediately with the computed next due date (daily = +1 d,
+  weekly = +7 d, monthly = +30 d, yearly = +365 d) and returns it as
+  `recur_entry` in the PATCH response. The UI unshifts the new entry without a
+  reload and fires the `entry_created` webhook.
+- Done entries hidden section: `done`-state entries are separated into a
+  collapsible section below the main list. A ▼ / ▲ toggle shows the count and
+  expands/collapses. Open entries stay in the main list.
+- `?` help overlay: pressing `?` (or the `?` button in the topbar) toggles a
+  modal showing all keyboard shortcuts, entry types, state machine, and a
+  priority/due/recur quick reference. `Escape` closes it.
+- QR code mobile access: the 📱 button in the topbar opens a modal that fetches
+  LAN IPs from `/api/network` and renders a QR code for each address using
+  `qrcode.js` (CDN, no build step). Scanning the QR opens EntryBox on any device
+  on the same network.
+- `/api/network` endpoint: returns the server's LAN IP addresses and port number
+  for use by the QR modal and other local-network clients.
+
+### Changed
+
+- Agent annotation blocks (written into `CLAUDE.md`, `.cursorrules`, etc.) now
+  include an optional-fields section instructing the agent to use `priority`,
+  `due`, and `recur` when the user asks for them (e.g. "mark this high
+  priority", "set due date to Friday", "make this repeat weekly"). The JS mirror
+  of `build_annotation()` in `index.html` matches.
+- REST API: POST `/api/projects/{id}/entries` and PATCH
+  `/api/projects/{id}/entries` both accept `priority`, `due`, and `recur`
+  fields. PATCH returns `recur_entry` in the response body when a recurring
+  entry is marked done.
+- Due date input replaced with a custom branded datepicker. The native
+  `<input type="date">` browser popup has been removed; an Alpine.js calendar
+  component now renders the picker using the active theme's CSS variables
+  (`--surface`, `--surface2`, `--border`, `--accent`, `--text`, `--text2`,
+  `--radius`). Selection, clear, and "Today" shortcut work in the log form and
+  both inline edit forms. The picker is 222 px wide and does not stretch to fill
+  the form row.
+
+---
+
 ## [1.5.0] - 2026-06-03
 
 ### Added

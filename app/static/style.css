@@ -10,6 +10,7 @@ html, body {
   font-size: 13px;
   line-height: 1.5;
   overflow: hidden;
+  color-scheme: dark;
 }
 
 /* ── Layout ── */
@@ -104,6 +105,10 @@ body.embed #content { padding: 12px; height: 100vh; overflow-y: auto; }
 .att-img-link { display: inline-block; }
 .att-file { color: var(--accent); text-decoration: none; font-size: 12px; }
 .att-file:hover { text-decoration: underline; }
+/* Failed-load fallback: hidden until the <img> onerror flips .att-failed. */
+.att-fallback { display: none; margin: 6px 0; }
+.att-failed .att-img-link { display: none; }
+.att-failed .att-fallback { display: inline-block; }
 
 /* ── Entry body wrap (copy + collapse) ── */
 .entry-body-wrap { position: relative; }
@@ -381,6 +386,54 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
   text-transform: uppercase; color: var(--text2); margin-bottom: 12px; }
 .toggle-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 12px; }
 .toggle-row input[type="checkbox"] { accent-color: var(--accent); }
+
+/* ── Datepicker ── */
+.dp-trigger {
+  width: 222px; text-align: left; padding: 6px 10px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text);
+  font-size: 12px; font-family: var(--font); cursor: pointer;
+  outline: none; transition: border-color .12s;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dp-trigger:focus, .dp-trigger.open { border-color: var(--accent); }
+.dp-popup {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 200;
+  width: 222px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: 0 6px 20px rgba(0,0,0,.5); padding: 10px;
+}
+.dp-nav {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
+}
+.dp-nav button {
+  background: none; border: none; color: var(--text2); cursor: pointer;
+  font-size: 14px; padding: 2px 6px; border-radius: var(--radius);
+  transition: color .1s;
+}
+.dp-nav button:hover { color: var(--text); }
+.dp-nav span { font-size: 12px; color: var(--text); font-weight: 600; }
+.dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.dp-hdr { text-align: center; font-size: 10px; color: var(--text2); padding: 2px 0; margin-bottom: 2px; }
+.dp-day {
+  aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+  font-size: 11px; border-radius: var(--radius); cursor: pointer;
+  background: none; border: 1px solid transparent; color: var(--text2);
+  transition: background .1s, color .1s;
+}
+.dp-day:hover:not(:disabled):not(.selected) { background: var(--surface2); color: var(--text); }
+.dp-day.today { border-color: var(--accent); color: var(--accent); }
+.dp-day.selected { background: var(--accent); color: #fff; border-color: var(--accent); }
+.dp-day:disabled { opacity: 0; pointer-events: none; }
+.dp-footer {
+  display: flex; justify-content: space-between; margin-top: 8px;
+  border-top: 1px solid var(--border); padding-top: 8px;
+}
+.dp-footer button {
+  background: none; border: none; font-size: 11px; cursor: pointer;
+  color: var(--text2); padding: 2px 4px; border-radius: var(--radius);
+  transition: color .1s;
+}
+.dp-footer button:hover { color: var(--accent); }
 
 /* ── Utility ── */
 [x-cloak] { display: none !important; }

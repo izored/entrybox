@@ -4,8 +4,9 @@ from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 from app.projects import get_project, project_status
 from app.entries import (
-    VALID_TYPES, VALID_STATES,
-    load_entries, add_entry, update_entry_state, update_entry, delete_entry, ensure_file,
+    VALID_TYPES, VALID_STATES, VALID_PRIORITIES, VALID_RECURS,
+    load_entries, add_entry, update_entry_state, update_entry, delete_entry,
+    ensure_file, next_due,
 )
 from app.config import WEBHOOK_URL
 
@@ -65,8 +66,17 @@ async def create_entry(project_id: str, body: dict):
         entry_type = "idea"
     text = (body.get("body") or "").strip()
 
+    priority = (body.get("priority") or "").strip().upper() or None
+    if priority and priority not in VALID_PRIORITIES:
+        priority = None
+    due = (body.get("due") or "").strip() or None
+    recur = (body.get("recur") or "").strip().lower() or None
+    if recur and recur not in VALID_RECURS:
+        recur = None
+
     entries_file = Path(project["entries_file"])
-    entry = add_entry(entries_file, project["prefix"], project["name"], title, text, entry_type)
+    entry = add_entry(entries_file, project["prefix"], project["name"], title, text,
+                      entry_type, priority=priority, due=due, recur=recur)
     await _fire_webhook("entry_created", project, entry)
     return {"ok": True, **entry}
 
@@ -83,8 +93,8 @@ async def patch_entry(project_id: str, body: dict):
     entries_file = Path(project["entries_file"])
     entry = None
 
-    # Content edit — title / body / type. A key is only touched if it was sent.
-    if body.keys() & {"title", "body", "type"}:
+    # Content edit — title / body / type / priority / due / recur.
+    if body.keys() & {"title", "body", "type", "priority", "due", "recur"}:
         new_title = body.get("title")
         if new_title is not None:
             new_title = new_title.strip()
@@ -98,14 +108,31 @@ async def patch_entry(project_id: str, body: dict):
         new_body = body.get("body")
         if new_body is not None:
             new_body = new_body.strip()
+
+        new_priority = body.get("priority")
+        if new_priority is not None:
+            new_priority = new_priority.strip().upper()
+            if new_priority and new_priority not in VALID_PRIORITIES:
+                return JSONResponse({"error": f"invalid priority, must be one of {sorted(VALID_PRIORITIES)}"}, status_code=400)
+        new_due = body.get("due")
+        if new_due is not None:
+            new_due = new_due.strip()
+        new_recur = body.get("recur")
+        if new_recur is not None:
+            new_recur = new_recur.strip().lower()
+            if new_recur and new_recur not in VALID_RECURS:
+                return JSONResponse({"error": f"invalid recur, must be one of {sorted(VALID_RECURS)}"}, status_code=400)
+
         entry = update_entry(entries_file, project["prefix"], entry_id,
-                             title=new_title, body=new_body, entry_type=new_type)
+                             title=new_title, body=new_body, entry_type=new_type,
+                             priority=new_priority, due=new_due, recur=new_recur)
         if entry is None:
             return JSONResponse({"error": "entry not found"}, status_code=404)
         await _fire_webhook("entry_updated", project, entry)
 
     # State change — handled separately so it keeps its own webhook + done_at logic.
     new_state = (body.get("state") or "").strip().lower()
+    recur_entry = None
     if new_state:
         if new_state not in VALID_STATES:
             return JSONResponse({"error": f"invalid state, must be one of {sorted(VALID_STATES)}"}, status_code=400)
@@ -114,9 +141,24 @@ async def patch_entry(project_id: str, body: dict):
             return JSONResponse({"error": "entry not found"}, status_code=404)
         await _fire_webhook("state_changed", project, entry, old_state)
 
+        # Recurrence: when a recurring entry is marked done, auto-create the next one.
+        if new_state == "done" and entry.get("recur"):
+            nd = next_due(entry.get("due"), entry["recur"])
+            recur_entry = add_entry(
+                entries_file, project["prefix"], project["name"],
+                entry["title"], entry.get("body", ""), entry["type"],
+                priority=entry.get("priority"),
+                due=nd,
+                recur=entry["recur"],
+            )
+            await _fire_webhook("entry_created", project, recur_entry)
+
     if entry is None:
         return JSONResponse({"error": "nothing to update; send state and/or title/body/type"}, status_code=400)
-    return {"ok": True, "entry": entry}
+    result = {"ok": True, "entry": entry}
+    if recur_entry:
+        result["recur_entry"] = recur_entry
+    return result
 
 
 @router.delete("/api/projects/{project_id}/entries")

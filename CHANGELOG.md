@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.5.1] - 2026-06-04
 
-> _Status: planned — build starts 2026-06-04. Items below are the spec; code not yet written._
+> _Status: in active development (updated 2026-06-14)._
 
 ### Also queued for this session (after 1.5.1)
 
@@ -46,12 +46,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `?` help overlay: pressing `?` (or the `?` button in the topbar) toggles a
   modal showing all keyboard shortcuts, entry types, state machine, and a
   priority/due/recur quick reference. `Escape` closes it.
-- QR code mobile access: the 📱 button in the topbar opens a modal that fetches
-  LAN IPs from `/api/network` and renders a QR code for each address using
-  `qrcode.js` (CDN, no build step). Scanning the QR opens EntryBox on any device
-  on the same network.
 - `/api/network` endpoint: returns the server's LAN IP addresses and port number
-  for use by the QR modal and other local-network clients.
+  for local-network clients.
+- `ENTRYBOX_MAX_UPLOAD_MB` environment variable (default `25`). Sets the
+  attachment size limit for both upload and serving — raise it for larger files.
+- Attachment upload feedback. A client-side size pre-check rejects an oversize
+  file instantly (toast naming the file size and the limit) instead of failing
+  after a wasted round-trip; a success toast confirms each attach with its size;
+  and an image that fails to load (missing, oversize, or server down) now shows a
+  clickable "⚠ couldn't load — open file" fallback link instead of a silent
+  broken image.
 
 ### Changed
 
@@ -71,6 +75,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `--radius`). Selection, clear, and "Today" shortcut work in the log form and
   both inline edit forms. The picker is 222 px wide and does not stretch to fill
   the form row.
+- highlight.js and Alpine.js are now vendored locally under `app/static/vendor/`
+  instead of loading from `cdn.jsdelivr.net`. EntryBox boots fully offline and
+  the script bytes are pinned in-repo — Alpine moved off the floating `3.x.x`
+  range to a fixed `3.15.12`. There are now no third-party script origins.
+
+### Fixed
+
+- Attachments larger than 512 KB uploaded successfully but returned **413
+  Request Entity Too Large** when the page tried to display them: the `/file`
+  serve route reused the small text-preview cap (`MAX_READ_BYTES`, 512 KB) for
+  attachment serving while uploads allowed far more. Attachments now serve up to
+  the upload limit (default 25 MB); generic file previews keep the smaller cap.
+- Deleting an entry no longer removes attachments that another entry still
+  references. A shared image survives until its last referrer is deleted; a
+  solo attachment is still reaped with its only entry.
+
+### Security
+
+- Served `.svg` attachments can no longer execute scripts in the app origin.
+  The `/file` route now sends `X-Content-Type-Options: nosniff` on every served
+  file and forces `Content-Disposition: attachment` for SVG, so opening an
+  attached SVG downloads it instead of running it as a same-origin document with
+  access to every EntryBox API. Inline `<img>` preview is unaffected.
+- Vendoring the frontend scripts (see Changed) removes the supply-chain exposure
+  of loading executable JavaScript — including a floating Alpine version — from a
+  third-party CDN into a tool that reads local project files and writes into
+  agent config files.
+
+### Removed
+
+- QR code mobile access (the 📱 topbar button and modal). The qrcode CDN build
+  it depended on is no longer published, and mobile access will be reapproached.
+  The `/api/network` endpoint it used is retained for future local-network
+  clients.
 
 ---
 

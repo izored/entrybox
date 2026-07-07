@@ -7,8 +7,8 @@
   <link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
   <link rel="stylesheet" href="/static/style.css">
   <style id="eb-theme">/* theme vars injected at runtime */</style>
-  <script defer src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script defer src="/static/vendor/highlight.min.js"></script>
+  <script defer src="/static/vendor/alpine.min.js"></script>
 </head>
 <body x-data="entrybox()" x-init="init()" :class="embed ? 'embed' : ''">
 
@@ -271,6 +271,7 @@
           <option :value="t.id" x-text="t.name"></option>
         </template>
       </select>
+      <button class="btn btn-ghost btn-sm" @click="showHelp=true" title="Shortcuts &amp; reference (?)">?</button>
       <button class="btn btn-ghost btn-sm" @click="settingsOpen=true" title="Settings">⚙</button>
     </div>
   </div>
@@ -339,6 +340,44 @@
                 <option value="roadmap">🟣 roadmap</option>
               </select>
             </div>
+            <div class="log-row" style="margin-top:6px">
+              <select x-model="logForm.priority" title="Priority (optional)" style="flex:0 0 auto">
+                <option value="">— priority</option>
+                <option value="A">🔴 A — high</option>
+                <option value="B">🟠 B — medium</option>
+                <option value="C">🟢 C — low</option>
+              </select>
+              <div x-data="datepicker(logForm, 'due')" style="flex:0 0 auto;position:relative">
+                <button type="button" class="dp-trigger" :class="open ? 'open' : ''" @click="toggle()" title="Due date (optional)">
+                  <span x-show="value" x-text="display"></span>
+                  <span x-show="!value" style="color:var(--text2)">Due date</span>
+                </button>
+                <div x-show="open" @click.outside="open=false" x-cloak class="dp-popup">
+                  <div class="dp-nav">
+                    <button type="button" @click="prevMonth()">‹</button>
+                    <span x-text="monthLabel"></span>
+                    <button type="button" @click="nextMonth()">›</button>
+                  </div>
+                  <div class="dp-grid">
+                    <template x-for="h in ['Mo','Tu','We','Th','Fr','Sa','Su']"><div class="dp-hdr" x-text="h"></div></template>
+                    <template x-for="(d, i) in days()" :key="i">
+                      <button type="button" class="dp-day" :class="{'selected':isSelected(d),'today':isToday(d)}" :disabled="!d" @click="select(d)"><span x-text="d||''"></span></button>
+                    </template>
+                  </div>
+                  <div class="dp-footer">
+                    <button type="button" @click="clear()" x-show="value">Clear</button>
+                    <button type="button" @click="select(new Date().getDate()); viewYear=new Date().getFullYear(); viewMonth=new Date().getMonth();">Today</button>
+                  </div>
+                </div>
+              </div>
+              <select x-model="logForm.recur" title="Recurrence (optional)" style="flex:0 0 auto">
+                <option value="">— no repeat</option>
+                <option value="daily">↺ daily</option>
+                <option value="weekly">↺ weekly</option>
+                <option value="monthly">↺ monthly</option>
+                <option value="yearly">↺ yearly</option>
+              </select>
+            </div>
             <textarea x-model="logForm.body" @paste="handlePaste($event,'log')"
                       placeholder="Optional: describe it. Paste or drop a screenshot or file to attach it…"
                       rows="3" style="margin-bottom:10px"></textarea>
@@ -372,7 +411,7 @@
             <div>Add the first entry above.</div>
           </div>
 
-          <template x-for="entry in entries" :key="entry.id">
+          <template x-for="entry in openEntries" :key="entry.id">
             <div class="entry-card" :style="typeStyle(entry.type)">
               <div class="entry-header">
                 <span class="badge badge-id" x-text="entry.id"></span>
@@ -394,6 +433,11 @@
                   done · <span x-text="fmtDate(entry.done_at)"></span>
                 </button>
 
+                <!-- Priority / due / recur badges -->
+                <span x-show="entry.priority" class="badge" :style="priorityStyle(entry.priority)" x-text="entry.priority" :title="'Priority ' + entry.priority"></span>
+                <span x-show="entry.due" class="badge" :style="dueStyle(entry)" x-text="formatDue(entry.due)" title="Due date"></span>
+                <span x-show="entry.recur" :title="'Recurs ' + entry.recur" style="font-size:10px;color:var(--text2);padding:0 3px;flex-shrink:0">↺</span>
+
                 <span class="entry-title" x-show="editingId !== entry.id" x-text="entry.title"></span>
                 <span class="entry-title" x-show="editingId === entry.id" style="color:var(--text2);font-style:italic">editing…</span>
                 <span class="entry-ts" x-text="entry.timestamp"></span>
@@ -413,6 +457,44 @@
                     <option value="docs">🔵 docs</option>
                     <option value="idea">🟠 idea</option>
                     <option value="roadmap">🟣 roadmap</option>
+                  </select>
+                </div>
+                <div class="log-row" style="margin-top:6px">
+                  <select x-model="editForm.priority" title="Priority" style="flex:0 0 auto">
+                    <option value="">— priority</option>
+                    <option value="A">🔴 A — high</option>
+                    <option value="B">🟠 B — medium</option>
+                    <option value="C">🟢 C — low</option>
+                  </select>
+                  <div x-data="datepicker(editForm, 'due')" style="flex:0 0 auto;position:relative">
+                    <button type="button" class="dp-trigger" :class="open ? 'open' : ''" @click="toggle()" title="Due date">
+                      <span x-show="value" x-text="display"></span>
+                      <span x-show="!value" style="color:var(--text2)">Due date</span>
+                    </button>
+                    <div x-show="open" @click.outside="open=false" x-cloak class="dp-popup">
+                      <div class="dp-nav">
+                        <button type="button" @click="prevMonth()">‹</button>
+                        <span x-text="monthLabel"></span>
+                        <button type="button" @click="nextMonth()">›</button>
+                      </div>
+                      <div class="dp-grid">
+                        <template x-for="h in ['Mo','Tu','We','Th','Fr','Sa','Su']"><div class="dp-hdr" x-text="h"></div></template>
+                        <template x-for="(d, i) in days()" :key="i">
+                          <button type="button" class="dp-day" :class="{'selected':isSelected(d),'today':isToday(d)}" :disabled="!d" @click="select(d)"><span x-text="d||''"></span></button>
+                        </template>
+                      </div>
+                      <div class="dp-footer">
+                        <button type="button" @click="clear()" x-show="value">Clear</button>
+                        <button type="button" @click="select(new Date().getDate()); viewYear=new Date().getFullYear(); viewMonth=new Date().getMonth();">Today</button>
+                      </div>
+                    </div>
+                  </div>
+                  <select x-model="editForm.recur" title="Recurrence" style="flex:0 0 auto">
+                    <option value="">— no repeat</option>
+                    <option value="daily">↺ daily</option>
+                    <option value="weekly">↺ weekly</option>
+                    <option value="monthly">↺ monthly</option>
+                    <option value="yearly">↺ yearly</option>
                   </select>
                 </div>
                 <textarea x-model="editForm.body" rows="3" @paste="handlePaste($event,'edit')"
@@ -453,6 +535,116 @@
                     :disabled="loadingMore"
                     x-text="loadingMore ? 'Loading…' : 'Load more (' + (entriesTotal - entries.length) + ' remaining)'">
             </button>
+          </div>
+
+          <!-- Done section -->
+          <div x-show="doneEntries.length > 0" style="margin-top:8px">
+            <button class="btn btn-ghost btn-sm" @click="showDone=!showDone"
+                    style="width:100%;text-align:left;opacity:.7;border-color:var(--border)">
+              <span x-text="showDone ? '▲' : '▼'"></span>
+              &nbsp;Done
+              <span style="color:var(--text2)" x-text="'(' + doneEntries.length + (entries.length < entriesTotal ? '+' : '') + ')'"></span>
+            </button>
+            <div x-show="showDone" x-cloak>
+              <template x-for="entry in doneEntries" :key="entry.id">
+                <div class="entry-card" :style="typeStyle(entry.type)" style="opacity:.8">
+                  <div class="entry-header">
+                    <span class="badge badge-id" x-text="entry.id"></span>
+                    <span class="badge" :class="'badge-' + entry.type" x-text="entry.type"></span>
+                    <button class="state-done-btn" disabled>
+                      done · <span x-text="fmtDate(entry.done_at)"></span>
+                    </button>
+                    <span x-show="entry.priority" class="badge" :style="priorityStyle(entry.priority)" x-text="entry.priority" :title="'Priority ' + entry.priority"></span>
+                    <span x-show="entry.due" class="badge" :style="dueStyle(entry)" x-text="formatDue(entry.due)" title="Due date"></span>
+                    <span x-show="entry.recur" :title="'Recurs ' + entry.recur" style="font-size:10px;color:var(--text2);padding:0 3px;flex-shrink:0">↺</span>
+                    <span class="entry-title" x-show="editingId !== entry.id" x-text="entry.title"></span>
+                    <span class="entry-title" x-show="editingId === entry.id" style="color:var(--text2);font-style:italic">editing…</span>
+                    <span class="entry-ts" x-text="entry.timestamp"></span>
+                    <button class="edit-btn" x-show="editingId !== entry.id" @click="startEdit(entry)" title="Edit">✎</button>
+                    <button class="delete-btn" x-show="editingId !== entry.id" @click="confirmDelete(entry)" title="Remove">✕</button>
+                  </div>
+                  <div class="entry-edit" x-show="editingId === entry.id" x-cloak>
+                    <div class="log-row">
+                      <input type="text" x-model="editForm.title" placeholder="Title"
+                             @keydown.enter="!editForm.saving && editForm.title.trim() && saveEdit(entry)"
+                             @keydown.escape="cancelEdit()">
+                      <select x-model="editForm.type">
+                        <option value="fix">🔴 fix</option>
+                        <option value="improve">🟢 improve</option>
+                        <option value="docs">🔵 docs</option>
+                        <option value="idea">🟠 idea</option>
+                        <option value="roadmap">🟣 roadmap</option>
+                      </select>
+                    </div>
+                    <div class="log-row" style="margin-top:6px">
+                      <select x-model="editForm.priority" title="Priority" style="flex:0 0 auto">
+                        <option value="">— priority</option>
+                        <option value="A">🔴 A — high</option>
+                        <option value="B">🟠 B — medium</option>
+                        <option value="C">🟢 C — low</option>
+                      </select>
+                      <div x-data="datepicker(editForm, 'due')" style="flex:0 0 auto;position:relative">
+                    <button type="button" class="dp-trigger" :class="open ? 'open' : ''" @click="toggle()" title="Due date">
+                      <span x-show="value" x-text="display"></span>
+                      <span x-show="!value" style="color:var(--text2)">Due date</span>
+                    </button>
+                    <div x-show="open" @click.outside="open=false" x-cloak class="dp-popup">
+                      <div class="dp-nav">
+                        <button type="button" @click="prevMonth()">‹</button>
+                        <span x-text="monthLabel"></span>
+                        <button type="button" @click="nextMonth()">›</button>
+                      </div>
+                      <div class="dp-grid">
+                        <template x-for="h in ['Mo','Tu','We','Th','Fr','Sa','Su']"><div class="dp-hdr" x-text="h"></div></template>
+                        <template x-for="(d, i) in days()" :key="i">
+                          <button type="button" class="dp-day" :class="{'selected':isSelected(d),'today':isToday(d)}" :disabled="!d" @click="select(d)"><span x-text="d||''"></span></button>
+                        </template>
+                      </div>
+                      <div class="dp-footer">
+                        <button type="button" @click="clear()" x-show="value">Clear</button>
+                        <button type="button" @click="select(new Date().getDate()); viewYear=new Date().getFullYear(); viewMonth=new Date().getMonth();">Today</button>
+                      </div>
+                    </div>
+                  </div>
+                      <select x-model="editForm.recur" title="Recurrence" style="flex:0 0 auto">
+                        <option value="">— no repeat</option>
+                        <option value="daily">↺ daily</option>
+                        <option value="weekly">↺ weekly</option>
+                        <option value="monthly">↺ monthly</option>
+                        <option value="yearly">↺ yearly</option>
+                      </select>
+                    </div>
+                    <textarea x-model="editForm.body" rows="3" @paste="handlePaste($event,'edit')"
+                              @drop.prevent="handleDrop($event,'edit')" @dragover.prevent
+                              placeholder="Optional: describe it. Paste or drop a screenshot or file to attach it…"></textarea>
+                    <div style="display:flex;align-items:center;gap:10px">
+                      <button class="btn btn-primary btn-sm" @click="saveEdit(entry)"
+                              :disabled="!editForm.title.trim() || editForm.saving"
+                              x-text="editForm.saving ? 'Saving…' : 'Save'"></button>
+                      <button class="btn btn-ghost btn-sm" @click="cancelEdit()">Cancel</button>
+                      <input type="file" multiple style="display:none"
+                             @change="_uploadList($event.target.files,'edit'); $event.target.value=''">
+                      <button class="btn btn-ghost btn-sm" @click="$event.target.previousElementSibling.click()" :disabled="attaching"
+                              title="Attach a screenshot or file">📎</button>
+                      <span class="text-muted text-sm" x-show="attaching" x-cloak>uploading…</span>
+                    </div>
+                  </div>
+                  <div class="entry-body-wrap" x-show="entry.body && editingId !== entry.id">
+                    <div class="entry-body"
+                         :class="isLongBody(entry) && !expandedEntries[entry.id] ? 'body-collapsed' : ''"
+                         x-html="renderBody(entry.body)"></div>
+                    <button x-show="isLongBody(entry)" class="body-toggle"
+                            @click="toggleExpand(entry.id)"
+                            x-text="expandedEntries[entry.id] ? '↑ show less' : '↓ show more'"></button>
+                    <button class="body-copy"
+                            @click="copyBody(entry)"
+                            :title="copiedId === entry.id ? 'Copied!' : 'Copy body'"
+                            x-html="copiedId === entry.id ? '✓' : '<svg width=\'13\' height=\'13\' viewBox=\'0 0 13 13\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.5\'><rect x=\'4\' y=\'1\' width=\'8\' height=\'9\' rx=\'1.5\'/><rect x=\'1\' y=\'4\' width=\'8\' height=\'9\' rx=\'1.5\' fill=\'var(--surface)\'/></svg>'">
+                    </button>
+                  </div>
+                </div>
+              </template>
+            </div>
           </div>
 
         </div>
@@ -662,6 +854,75 @@
   </div>
 </div>
 
+<!-- ── HELP OVERLAY ── -->
+<div class="modal-overlay" x-show="showHelp" x-cloak @click.self="showHelp=false" @keydown.escape.window="showHelp=false">
+  <div class="modal" style="width:480px;max-height:80vh;overflow-y:auto">
+    <div class="modal-title" style="display:flex;justify-content:space-between;align-items:center">
+      Reference
+      <button class="btn btn-ghost btn-sm" @click="showHelp=false" style="padding:2px 8px">✕</button>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-label">Keyboard shortcuts</div>
+      <table style="width:100%;font-size:12px;border-collapse:collapse">
+        <tr><td style="padding:3px 12px 3px 0;font-family:var(--font-mono);color:var(--accent)">?</td><td style="color:var(--text2)">Toggle this reference</td></tr>
+        <tr><td style="padding:3px 12px 3px 0;font-family:var(--font-mono);color:var(--accent)">Esc</td><td style="color:var(--text2)">Close modals</td></tr>
+        <tr><td style="padding:3px 12px 3px 0;font-family:var(--font-mono);color:var(--accent)">Enter</td><td style="color:var(--text2)">Submit entry (from title field)</td></tr>
+        <tr><td style="padding:3px 12px 3px 0;font-family:var(--font-mono);color:var(--accent)">← →</td><td style="color:var(--text2)">Navigate onboarding slides</td></tr>
+      </table>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-label">Entry types</div>
+      <table style="width:100%;font-size:12px;border-collapse:collapse">
+        <tr><td style="padding:3px 12px 3px 0;font-family:var(--font-mono);color:var(--type-fix)">fix</td><td style="color:var(--text2)">Something broken</td></tr>
+        <tr><td style="padding:3px 12px 3px 0;font-family:var(--font-mono);color:var(--type-improve)">improve</td><td style="color:var(--text2)">Enhancement to something existing</td></tr>
+        <tr><td style="padding:3px 12px 3px 0;font-family:var(--font-mono);color:var(--type-docs)">docs</td><td style="color:var(--text2)">Documentation work</td></tr>
+        <tr><td style="padding:3px 12px 3px 0;font-family:var(--font-mono);color:var(--type-idea)">idea</td><td style="color:var(--text2)">New unscoped thought</td></tr>
+        <tr><td style="padding:3px 12px 3px 0;font-family:var(--font-mono);color:var(--type-roadmap)">roadmap</td><td style="color:var(--text2)">Larger planned direction</td></tr>
+      </table>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-label">States</div>
+      <div style="font-family:var(--font-mono);font-size:12px;line-height:2.2">
+        <span style="color:var(--state-logged)">logged</span>
+        <span style="color:var(--text2)"> → </span>
+        <span style="color:var(--state-review)">review</span>
+        <span style="color:var(--text2)"> → </span>
+        <span style="color:var(--state-wip)">wip</span>
+        <span style="color:var(--text2)"> → </span>
+        <span style="color:var(--state-done)">done</span>
+        <span style="color:var(--text2)">&nbsp; ↘ &nbsp;</span>
+        <span style="color:var(--state-error)">error</span>
+      </div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-label">Priority</div>
+      <table style="width:100%;font-size:12px;border-collapse:collapse">
+        <tr><td style="padding:3px 12px 3px 0;font-family:var(--font-mono);color:var(--type-fix)">A</td><td style="color:var(--text2)">High — do soon</td></tr>
+        <tr><td style="padding:3px 12px 3px 0;font-family:var(--font-mono);color:var(--type-idea)">B</td><td style="color:var(--text2)">Medium</td></tr>
+        <tr><td style="padding:3px 12px 3px 0;font-family:var(--font-mono);color:var(--type-improve)">C</td><td style="color:var(--text2)">Low — when time allows</td></tr>
+      </table>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-label">Due dates &amp; recurrence</div>
+      <table style="width:100%;font-size:12px;border-collapse:collapse;margin-bottom:8px">
+        <tr><td style="padding:3px 12px 3px 0;color:var(--type-fix)">⚠ overdue</td><td style="color:var(--text2)">Past due date — shown in red</td></tr>
+        <tr><td style="padding:3px 12px 3px 0;color:var(--type-idea)">due today</td><td style="color:var(--text2)">Due today — shown in orange</td></tr>
+        <tr><td style="padding:3px 12px 3px 0;color:var(--type-improve)">due tomorrow</td><td style="color:var(--text2)">Due in 1 day — shown in green</td></tr>
+        <tr><td style="padding:3px 12px 3px 0;color:var(--text2)">YYYY-MM-DD</td><td style="color:var(--text2)">Future — shown in gray</td></tr>
+      </table>
+      <div style="font-size:11px;color:var(--text2)">When a recurring entry is marked <strong>done</strong>, a new one is auto-logged with the same content and the next due date.</div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-label">Entry format (.entrybox/entries.md)</div>
+      <pre style="font-size:10px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;overflow-x:auto;margin:0;white-space:pre-wrap">## PREFIX-0001 · 2026-06-04 14:30 · fix · logged — Title
+
+Optional body. Markdown supported.
+Paste or drop to attach files.</pre>
+    </div>
+  </div>
+</div>
+<!-- ── /HELP OVERLAY ── -->
+
 <!-- ── DELETE CONFIRM MODAL ── -->
 <div class="modal-overlay" x-show="deleteModal.open" x-cloak @click.self="deleteModal.open=false">
   <div class="modal" style="width:380px">
@@ -701,7 +962,7 @@ function entrybox() {
     showIntroOnLaunch: false,
 
     // Config
-    config: { booted: false, onboarded: false, theme: 'dark', ai_tools: ['claude-code'], auto_write_agent_config: true },
+    config: { booted: false, onboarded: false, theme: 'dark', ai_tools: ['claude-code'], auto_write_agent_config: true, max_upload_bytes: 25 * 1024 * 1024 },
 
     // Embed mode
     embed: false,
@@ -719,7 +980,7 @@ function entrybox() {
     expandedEntries: {},
     copiedId: null,
     editingId: null,
-    editForm: { title: '', body: '', type: 'idea', saving: false },
+    editForm: { title: '', body: '', type: 'idea', priority: '', due: '', recur: '', saving: false },
     attaching: false,
     lastLogged: null,
     _undoTimer: null,
@@ -735,7 +996,11 @@ function entrybox() {
     allAgents: [],
 
     // Log form
-    logForm: { title: '', body: '', type: 'idea', saving: false, saved: false },
+    logForm: { title: '', body: '', type: 'idea', priority: '', due: '', recur: '', saving: false, saved: false },
+
+    // Feature toggles
+    showDone: false,
+    showHelp: false,
 
     // Panels & modals
     settingsOpen: false,
@@ -753,6 +1018,37 @@ function entrybox() {
       return this.projects.find(p => p.id === this.activeProjectId) || null;
     },
 
+    get openEntries() { return this.entries.filter(e => e.state !== 'done'); },
+    get doneEntries()  { return this.entries.filter(e => e.state === 'done'); },
+
+    dueStatus(entry) {
+      if (!entry.due) return null;
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const d = new Date(entry.due + 'T00:00:00'); d.setHours(0, 0, 0, 0);
+      const diff = d - today;
+      if (diff < 0) return 'overdue';
+      if (diff === 0) return 'today';
+      if (diff <= 86400000) return 'soon';
+      return 'future';
+    },
+    dueStyle(entry) {
+      const s = this.dueStatus(entry);
+      if (!s) return '';
+      const c = { overdue: 'var(--type-fix)', today: 'var(--type-idea)', soon: 'var(--type-improve)', future: 'var(--text2)' }[s];
+      return `color:${c};border-color:${c}`;
+    },
+    priorityStyle(p) {
+      const c = { A: 'var(--type-fix)', B: 'var(--type-idea)', C: 'var(--type-improve)' }[p] || 'var(--text2)';
+      return `color:${c};border-color:${c}`;
+    },
+    formatDue(due) {
+      if (!due) return '';
+      const s = this.dueStatus({ due });
+      if (s === 'overdue') return '⚠ ' + due;
+      if (s === 'today') return 'due today';
+      if (s === 'soon') return 'due tomorrow';
+      return due;
+    },
     async init() {
       // ── Server preflight ─────────────────────────────────────
       try {
@@ -947,13 +1243,16 @@ function entrybox() {
       const res = await fetch(`/api/projects/${this.activeProject.id}/entries`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: this.logForm.title, body: this.logForm.body, type: this.logForm.type }),
+        body: JSON.stringify({ title: this.logForm.title, body: this.logForm.body, type: this.logForm.type,
+          priority: this.logForm.priority || null, due: this.logForm.due || null, recur: this.logForm.recur || null }),
       }).then(r => r.json()).catch(() => null);
-      const sent = { title: this.logForm.title, body: this.logForm.body, type: this.logForm.type };
-      this.logForm = { title: '', body: '', type: 'idea', saving: false, saved: true };
+      const sent = { title: this.logForm.title, body: this.logForm.body, type: this.logForm.type,
+        priority: this.logForm.priority, due: this.logForm.due, recur: this.logForm.recur };
+      this.logForm = { title: '', body: '', type: 'idea', priority: '', due: '', recur: '', saving: false, saved: true };
       if (res?.id) {
         this.entries.unshift({ id: res.id, timestamp: res.timestamp, type: res.type,
-          state: res.state, done_at: res.done_at ?? null, title: res.title, body: res.body ?? '' });
+          state: res.state, done_at: res.done_at ?? null, title: res.title, body: res.body ?? '',
+          priority: res.priority ?? null, due: res.due ?? null, recur: res.recur ?? null });
         this.entriesTotal++;
         // Undo window: keep the just-logged entry recallable for a few seconds.
         this.lastLogged = { ...sent, id: res.id };
@@ -973,7 +1272,7 @@ function entrybox() {
       const idx = this.entries.findIndex(e => e.id === last.id);
       if (idx !== -1) this.entries.splice(idx, 1);
       this.entriesTotal = Math.max(0, this.entriesTotal - 1);
-      this.logForm = { title: last.title, body: last.body, type: last.type, saving: false, saved: false };
+      this.logForm = { title: last.title, body: last.body, type: last.type, priority: last.priority || '', due: last.due || '', recur: last.recur || '', saving: false, saved: false };
       await fetch(`/api/projects/${this.activeProject.id}/entries`, {
         method: 'DELETE', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: last.id }),
@@ -995,7 +1294,12 @@ function entrybox() {
       }).then(r => r.json()).catch(() => null);
       if (res?.entry?.done_at && idx !== -1) {
         this.entries[idx].done_at = res.entry.done_at;
-      } else if (!res?.ok && idx !== -1) {
+      }
+      if (res?.recur_entry) {
+        this.entries.unshift(res.recur_entry);
+        this.entriesTotal++;
+      }
+      if (!res?.ok && idx !== -1) {
         this.entries[idx].state = prevState;
         this.entries[idx].done_at = prevDoneAt;
       }
@@ -1025,7 +1329,8 @@ function entrybox() {
 
     startEdit(entry) {
       this.editingId = entry.id;
-      this.editForm = { title: entry.title, body: entry.body || '', type: entry.type, saving: false };
+      this.editForm = { title: entry.title, body: entry.body || '', type: entry.type,
+        priority: entry.priority || '', due: entry.due || '', recur: entry.recur || '', saving: false };
     },
 
     cancelEdit() {
@@ -1039,7 +1344,8 @@ function entrybox() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: entry.id, title: this.editForm.title.trim(),
-          body: this.editForm.body, type: this.editForm.type }),
+          body: this.editForm.body, type: this.editForm.type,
+          priority: this.editForm.priority, due: this.editForm.due, recur: this.editForm.recur }),
       }).then(r => r.json()).catch(() => null);
       this.editForm.saving = false;
       if (res?.ok && res.entry) {
@@ -1048,6 +1354,9 @@ function entrybox() {
           this.entries[idx].title = res.entry.title;
           this.entries[idx].body = res.entry.body ?? '';
           this.entries[idx].type = res.entry.type;
+          this.entries[idx].priority = res.entry.priority ?? null;
+          this.entries[idx].due = res.entry.due ?? null;
+          this.entries[idx].recur = res.entry.recur ?? null;
         }
         this.editingId = null;
       }
@@ -1133,7 +1442,13 @@ function entrybox() {
       if (!this.activeProject) return alt;
       const a = alt.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
       const url = this._attUrl(path);
-      return `<a href="${url}" target="_blank" class="att-img-link"><img class="att-img" src="${url}" alt="${a}" loading="lazy"></a>`;
+      // Render image + a hidden fallback link. If the image fails to load
+      // (404 / 413 / server down) onerror flips a CSS class so the fallback
+      // link shows instead of a silent broken image.
+      return `<span class="att-img-wrap">`
+        + `<a href="${url}" target="_blank" class="att-img-link"><img class="att-img" src="${url}" alt="${a}" loading="lazy" onerror="this.closest('.att-img-wrap').classList.add('att-failed')"></a>`
+        + `<a href="${url}" target="_blank" class="att-file att-fallback">⚠ ${a || 'attachment'} — couldn’t load, open file</a>`
+        + `</span>`;
     },
     _attachmentLink(path, label) {
       if (!this.activeProject) return label;
@@ -1173,11 +1488,29 @@ function entrybox() {
       this[key].body = (this[key].body ? this[key].body.replace(/\s*$/, '') + '\n' : '') + md + '\n';
     },
 
+    _fmtBytes(n) {
+      if (n < 1024) return `${n} B`;
+      if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+      return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+    },
+
     async _uploadList(files, field) {
-      for (const file of Array.from(files || [])) {
+      const list = Array.from(files || []);
+      if (!list.length) return;
+      const max = this.config.max_upload_bytes || 25 * 1024 * 1024;
+      let ok = 0;
+      for (const file of list) {
+        if (file.size > max) {
+          this.showToast(`${file.name || 'file'} too big: ${this._fmtBytes(file.size)} (max ${this._fmtBytes(max)})`);
+          continue;
+        }
         const res = await this.uploadAttachment(file);
-        if (res) this._insertRef(field, (this._isImg(res.name) ? '!' : '') + `[${res.name}](${res.ref})`);
+        if (res) {
+          this._insertRef(field, (this._isImg(res.name) ? '!' : '') + `[${res.name}](${res.ref})`);
+          ok++;
+        }
       }
+      if (ok) this.showToast(ok === 1 ? `Attached (${this._fmtBytes(list[0].size)})` : `Attached ${ok} files`);
     },
 
     async handlePaste(ev, field) {
@@ -1412,6 +1745,26 @@ function entrybox() {
           `API: PATCH http://localhost:3859/api/projects/${proj.id}/entries  {"id": "${eid}", "state": "wip"}`,
           '',
           'States: logged, review, wip, done, error.',
+          '',
+          '### Optional entry fields',
+          '',
+          'Entries can carry priority, due date, and recurrence. Read them from',
+          '`.entrybox/entries.md` — they appear in the header as `· pri:A · due:2026-06-15 · recur:weekly`.',
+          '',
+          '| Field | Values | Meaning |',
+          '|-------|--------|---------|',
+          '| `priority` | A, B, C | A = urgent, C = low |',
+          '| `due` | YYYY-MM-DD | Due date |',
+          '| `recur` | daily / weekly / monthly / yearly | Auto-relogs on done |',
+          '',
+          'Set or clear via API (pass `""` to clear):',
+          `API: PATCH http://localhost:3859/api/projects/${proj.id}/entries  {"id": "${eid}", "priority": "A", "due": "2026-06-15"}`,
+          '',
+          'When the user says "mark this high priority", "set due date to Friday",',
+          'or "make this repeat weekly" — update the relevant field.',
+          'When creating an entry you can include these fields in the POST body.',
+          'When a recurring entry is marked done, EntryBox auto-creates the next',
+          'occurrence — you do not need to do anything extra.',
           em,
         ].join('\n');
       } else {
@@ -1428,6 +1781,12 @@ function entrybox() {
           '#  5. On confirmation set `wip`, do the work.',
           '#  6. Set `done` when finished, or `error` if blocked.',
           `# Set state: ${cli}`,
+          '#',
+          '# Optional fields: priority (A/B/C), due (YYYY-MM-DD), recur (daily/weekly/monthly/yearly).',
+          '# Read from header: ## ID · ts · type · state · pri:A · due:2026-06-15 · recur:weekly — title',
+          `# Set: PATCH http://localhost:3859/api/projects/${proj.id}/entries  {"id": "ID", "priority": "A", "due": "2026-06-15"}`,
+          "# If user says 'high priority' / 'due Friday' / 'repeat weekly' — update the field.",
+          '# Recurring entries auto-resubmit when marked done.',
           em,
         ].join('\n');
       }
@@ -1471,9 +1830,14 @@ function entrybox() {
 
     // keyboard navigation for onboarding
     _handleKey(e) {
-      if (!this.onboarding) return;
-      if (e.key === 'ArrowRight') this.nextSlide();
-      if (e.key === 'ArrowLeft') this.prevSlide();
+      if (this.onboarding) {
+        if (e.key === 'ArrowRight') this.nextSlide();
+        if (e.key === 'ArrowLeft') this.prevSlide();
+        return;
+      }
+      if (e.target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+      if (e.key === '?') { e.preventDefault(); this.showHelp = !this.showHelp; }
+      if (e.key === 'Escape') { this.showHelp = false; }
     },
   };
 }
@@ -1481,6 +1845,87 @@ function entrybox() {
 document.addEventListener('keydown', e => {
   const app = document.querySelector('[x-data]').__x?.$data;
   if (app) app._handleKey(e);
+});
+
+document.addEventListener('alpine:init', () => {
+  Alpine.data('datepicker', (model, key) => ({
+    model, key,
+    open: false,
+    viewYear: 0,
+    viewMonth: 0,
+
+    get value()    { return this.model[this.key] || ''; },
+    set value(v)   { this.model[this.key] = v; },
+
+    get display() {
+      if (!this.value) return '';
+      const [y, m, d] = this.value.split('-').map(Number);
+      return `${String(d).padStart(2,'0')} / ${String(m).padStart(2,'0')} / ${y}`;
+    },
+
+    get monthLabel() {
+      return new Date(this.viewYear, this.viewMonth, 1)
+        .toLocaleString('default', { month: 'long', year: 'numeric' });
+    },
+
+    init() {
+      const n = new Date();
+      this.viewYear = n.getFullYear();
+      this.viewMonth = n.getMonth();
+    },
+
+    toggle() {
+      if (!this.open && this.value) {
+        const [y, m] = this.value.split('-').map(Number);
+        this.viewYear = y; this.viewMonth = m - 1;
+      } else if (!this.open) {
+        const n = new Date();
+        this.viewYear = n.getFullYear(); this.viewMonth = n.getMonth();
+      }
+      this.open = !this.open;
+    },
+
+    prevMonth() {
+      if (this.viewMonth === 0) { this.viewMonth = 11; this.viewYear--; }
+      else this.viewMonth--;
+    },
+
+    nextMonth() {
+      if (this.viewMonth === 11) { this.viewMonth = 0; this.viewYear++; }
+      else this.viewMonth++;
+    },
+
+    days() {
+      const first = new Date(this.viewYear, this.viewMonth, 1).getDay();
+      const offset = (first + 6) % 7;
+      const total = new Date(this.viewYear, this.viewMonth + 1, 0).getDate();
+      const cells = Array(offset).fill(null);
+      for (let d = 1; d <= total; d++) cells.push(d);
+      return cells;
+    },
+
+    select(d) {
+      if (!d) return;
+      const m  = String(this.viewMonth + 1).padStart(2, '0');
+      const dd = String(d).padStart(2, '0');
+      this.value = `${this.viewYear}-${m}-${dd}`;
+      this.open = false;
+    },
+
+    clear() { this.value = ''; this.open = false; },
+
+    isSelected(d) {
+      if (!d || !this.value) return false;
+      const [y, m, dd] = this.value.split('-').map(Number);
+      return y === this.viewYear && m === this.viewMonth + 1 && dd === d;
+    },
+
+    isToday(d) {
+      if (!d) return false;
+      const n = new Date();
+      return n.getFullYear() === this.viewYear && n.getMonth() === this.viewMonth && n.getDate() === d;
+    },
+  }));
 });
 </script>
 

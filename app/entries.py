@@ -2,7 +2,7 @@ import logging
 import os
 import re
 import shutil
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 try:
@@ -22,11 +22,26 @@ _cache: dict[str, tuple[float, list[dict]]] = {}
 
 VALID_TYPES = {"fix", "improve", "docs", "idea", "roadmap"}
 VALID_STATES = {"logged", "review", "wip", "done", "error"}
+VALID_PRIORITIES = {"A", "B", "C"}
+VALID_RECURS = {"daily", "weekly", "monthly", "yearly"}
 
 # Timestamp fragment: a date with an OPTIONAL " HH:MM". Tolerating a missing
 # time keeps hand-written, date-only stamps from being silently dropped — a drop
 # made the entry invisible and let its ID number get recycled into a duplicate.
 _TS = r"\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?"
+
+# Optional ` · key:value` segments appended after state (or done_at).
+# key = word chars only; value = anything except whitespace, middle-dot, em-dash.
+# This pattern captures the whole segment including leading space·space.
+_EXTRAS_RE = r"((?:\s+·\s+\w+:[^\s·—]+)*)"
+
+
+def _extras(raw: str) -> dict:
+    """Extract key:value pairs from a ` · key:val · ...` extras segment."""
+    result = {}
+    for m in re.finditer(r'(\w+):([^\s·—]+)', raw or ''):
+        result[m.group(1)] = m.group(2)
+    return result
 
 
 def _header(project_name: str, prefix: str) -> str:
@@ -70,23 +85,29 @@ def _parse_block(block: str, prefix: str) -> dict | None:
     block = block.strip()
     pre = re.escape(prefix)
 
-    # With done_at: ## PREFIX-NNNN · ts · type · state · done_at — title
+    # With done_at: ## PREFIX-NNNN · ts · type · state · done_at [extras] — title
     m = re.match(
-        rf"## ({pre}-\d+) · ({_TS}) · (\w+) · (\w+) · ({_TS}) — (.+)\n?([\s\S]*)",
+        rf"## ({pre}-\d+) · ({_TS}) · (\w+) · (\w+) · ({_TS}){_EXTRAS_RE} — (.+)\n?([\s\S]*)",
         block,
     )
     if m:
+        ex = _extras(m.group(6))
         return {"id": m.group(1), "timestamp": m.group(2), "type": m.group(3),
-                "state": m.group(4), "done_at": m.group(5), "title": m.group(6).strip(), "body": m.group(7).strip()}
+                "state": m.group(4), "done_at": m.group(5), "title": m.group(7).strip(),
+                "body": m.group(8).strip(),
+                "priority": ex.get("pri"), "due": ex.get("due"), "recur": ex.get("recur")}
 
-    # Without done_at: ## PREFIX-NNNN · ts · type · state — title
+    # Without done_at: ## PREFIX-NNNN · ts · type · state [extras] — title
     m = re.match(
-        rf"## ({pre}-\d+) · ({_TS}) · (\w+) · (\w+) — (.+)\n?([\s\S]*)",
+        rf"## ({pre}-\d+) · ({_TS}) · (\w+) · (\w+){_EXTRAS_RE} — (.+)\n?([\s\S]*)",
         block,
     )
     if m:
+        ex = _extras(m.group(5))
         return {"id": m.group(1), "timestamp": m.group(2), "type": m.group(3),
-                "state": m.group(4), "done_at": None, "title": m.group(5).strip(), "body": m.group(6).strip()}
+                "state": m.group(4), "done_at": None, "title": m.group(6).strip(),
+                "body": m.group(7).strip(),
+                "priority": ex.get("pri"), "due": ex.get("due"), "recur": ex.get("recur")}
 
     # Transitional (no state): ## PREFIX-NNNN · ts · type — title
     m = re.match(
@@ -95,13 +116,17 @@ def _parse_block(block: str, prefix: str) -> dict | None:
     )
     if m:
         return {"id": m.group(1), "timestamp": m.group(2), "type": m.group(3),
-                "state": "logged", "done_at": None, "title": m.group(4).strip(), "body": m.group(5).strip()}
+                "state": "logged", "done_at": None, "title": m.group(4).strip(),
+                "body": m.group(5).strip(),
+                "priority": None, "due": None, "recur": None}
 
     # Old format: ## YYYY-MM-DD HH:MM — title
     m = re.match(rf"## ({_TS}) — (.+)\n?([\s\S]*)", block)
     if m:
         return {"id": None, "timestamp": m.group(1), "type": "idea",
-                "state": "logged", "done_at": None, "title": m.group(2).strip(), "body": m.group(3).strip()}
+                "state": "logged", "done_at": None, "title": m.group(2).strip(),
+                "body": m.group(3).strip(),
+                "priority": None, "due": None, "recur": None}
 
     return None
 
@@ -110,10 +135,23 @@ def _entry_text(entry: dict) -> str:
     body = entry.get("body") or ""
     state = entry.get("state") or "logged"
     done_at = entry.get("done_at")
+    priority = entry.get("priority")
+    due = entry.get("due")
+    recur = entry.get("recur")
+
     if state == "done" and done_at:
-        header = f"## {entry['id']} · {entry['timestamp']} · {entry['type']} · {state} · {done_at} — {entry['title']}"
+        header = f"## {entry['id']} · {entry['timestamp']} · {entry['type']} · {state} · {done_at}"
     else:
-        header = f"## {entry['id']} · {entry['timestamp']} · {entry['type']} · {state} — {entry['title']}"
+        header = f"## {entry['id']} · {entry['timestamp']} · {entry['type']} · {state}"
+
+    if priority:
+        header += f" · pri:{priority}"
+    if due:
+        header += f" · due:{due}"
+    if recur:
+        header += f" · recur:{recur}"
+
+    header += f" — {entry['title']}"
     return f"{header}\n\n{body}\n" if body else f"{header}\n\n"
 
 
@@ -168,14 +206,11 @@ def load_entries(entries_file: Path, prefix: str) -> list[dict]:
         for entry in entries:
             eid = entry["id"]
             if eid is None or eid in assigned:
-                # Missing ID, or a duplicate of one already kept → fresh ID. The
-                # earliest occurrence keeps the number; later collisions move.
                 if eid is not None:
                     logger.warning("entrybox: duplicate id %s in %s — reassigning", eid, entries_file)
                 entry["id"] = _next_id(existing_ids, prefix)
                 existing_ids.append(entry["id"])
             assigned.add(entry["id"])
-            # Self-heal: normalise any date-only stamps while we're rewriting.
             entry["timestamp"] = _pad_ts(entry["timestamp"])
             entry["done_at"] = _pad_ts(entry["done_at"])
         body_text = "\n".join(_entry_text(e) for e in entries)
@@ -186,25 +221,42 @@ def load_entries(entries_file: Path, prefix: str) -> list[dict]:
     return list(reversed(entries))
 
 
-def add_entry(entries_file: Path, prefix: str, project_name: str, title: str, body: str, entry_type: str) -> dict:
+def add_entry(entries_file: Path, prefix: str, project_name: str, title: str, body: str,
+              entry_type: str, priority: str | None = None, due: str | None = None,
+              recur: str | None = None) -> dict:
     ensure_file(entries_file, project_name, prefix)
     with _lock(entries_file):
-        # Trigger any legacy-format migration/rewrite first…
         load_entries(entries_file, prefix)
-        # …then derive the next ID from every PREFIX-NNNN token in the file, so an
-        # unparseable block can never cause a number to be handed out twice.
         raw = entries_file.read_text(encoding="utf-8", errors="replace")
         existing_ids = re.findall(rf"{re.escape(prefix)}-\d+", raw)
         new_id = _next_id(existing_ids, prefix)
         ts = datetime.now().strftime("%Y-%m-%d %H:%M")
         entry = {"id": new_id, "timestamp": ts, "type": entry_type, "state": "logged",
-                 "done_at": None, "title": title, "body": body}
+                 "done_at": None, "title": title, "body": body,
+                 "priority": priority or None, "due": due or None, "recur": recur or None}
         with open(entries_file, "a", encoding="utf-8") as f:
             f.write("\n" + _entry_text(entry))
     return entry
 
 
-def update_entry_state(entries_file: Path, prefix: str, entry_id: str, new_state: str) -> tuple[dict | None, str | None]:
+def next_due(due: str | None, recur: str) -> str | None:
+    """Compute the next due date for a recurring entry after completion."""
+    if not due:
+        return None
+    try:
+        d = date.fromisoformat(due)
+        deltas = {"daily": timedelta(1), "weekly": timedelta(7),
+                  "monthly": timedelta(30), "yearly": timedelta(365)}
+        delta = deltas.get(recur)
+        if delta is None:
+            return None
+        return (d + delta).isoformat()
+    except (ValueError, TypeError):
+        return None
+
+
+def update_entry_state(entries_file: Path, prefix: str, entry_id: str,
+                       new_state: str) -> tuple[dict | None, str | None]:
     if not entries_file.exists():
         return None, None
     with _lock(entries_file):
@@ -215,14 +267,15 @@ def update_entry_state(entries_file: Path, prefix: str, entry_id: str, new_state
         old_state = entry["state"]
         entry["state"] = new_state
         text = entries_file.read_text(encoding="utf-8", errors="replace")
-        pattern = rf"(## {re.escape(entry_id)} · [^·]+ · \w+) · \w+(?: · {_TS})? —"
+        # Capture extras (pri:/due:/recur: fields) to preserve them through the state change.
+        pattern = rf"(## {re.escape(entry_id)} · [^·]+ · \w+) · \w+(?: · {_TS})?{_EXTRAS_RE} —"
         if new_state == "done":
             done_at = datetime.now().strftime("%Y-%m-%d %H:%M")
             entry["done_at"] = done_at
-            replacement = rf"\1 · {new_state} · {done_at} —"
+            replacement = rf"\1 · {new_state} · {done_at}\2 —"
         else:
             entry["done_at"] = None
-            replacement = rf"\1 · {new_state} —"
+            replacement = rf"\1 · {new_state}\2 —"
         new_text = re.sub(pattern, replacement, text)
         _write_atomic(entries_file, new_text)
     return entry, old_state
@@ -230,11 +283,12 @@ def update_entry_state(entries_file: Path, prefix: str, entry_id: str, new_state
 
 def update_entry(entries_file: Path, prefix: str, entry_id: str,
                  title: str | None = None, body: str | None = None,
-                 entry_type: str | None = None) -> dict | None:
-    """Edit an entry's title, body, and/or type in place. ID, timestamp, state
-    and done_at are preserved. Only the target block is rewritten — sibling
-    blocks are left byte-for-byte untouched. Returns the updated entry, or None
-    if the ID is not found. Pass a field as None to leave it unchanged."""
+                 entry_type: str | None = None, priority: str | None = None,
+                 due: str | None = None, recur: str | None = None) -> dict | None:
+    """Edit an entry's title, body, type, priority, due, and/or recur in place.
+    ID, timestamp, state and done_at are preserved. Only the target block is
+    rewritten — sibling blocks are left byte-for-byte untouched. Pass a field
+    as None to leave it unchanged; pass empty string to clear it."""
     if not entries_file.exists():
         return None
     with _lock(entries_file):
@@ -251,6 +305,12 @@ def update_entry(entries_file: Path, prefix: str, entry_id: str,
                     parsed["type"] = entry_type
                 if body is not None:
                     parsed["body"] = body
+                if priority is not None:
+                    parsed["priority"] = priority if priority else None
+                if due is not None:
+                    parsed["due"] = due if due else None
+                if recur is not None:
+                    parsed["recur"] = recur if recur else None
                 blocks[i] = _entry_text(parsed)
                 updated = parsed
                 break
@@ -261,14 +321,18 @@ def update_entry(entries_file: Path, prefix: str, entry_id: str,
     return updated
 
 
-def _reap_attachments(entrybox_dir: Path, block_text: str) -> None:
-    """Delete attachment files referenced by a removed entry block. Best-effort,
-    sandboxed to the project's .entrybox/attachments dir."""
+def _reap_attachments(entrybox_dir: Path, block_text: str, surviving_text: str = "") -> None:
+    """Delete attachment files referenced ONLY by a removed entry block.
+    Files still referenced by `surviving_text` (the remaining entries) are
+    kept. Best-effort, sandboxed to the project's .entrybox/attachments dir."""
     try:
         att_dir = (entrybox_dir / "attachments").resolve()
     except (OSError, RuntimeError):
         return
+    still_referenced = set(re.findall(r"attachments/([A-Za-z0-9._-]+)", surviving_text))
     for ref in set(re.findall(r"attachments/([A-Za-z0-9._-]+)", block_text)):
+        if ref in still_referenced:
+            continue
         target = (att_dir / ref).resolve()
         try:
             target.relative_to(att_dir)
@@ -293,5 +357,5 @@ def delete_entry(entries_file: Path, prefix: str, entry_id: str) -> bool:
             return False
         _write_atomic(entries_file, new_text)
         if m:
-            _reap_attachments(entries_file.parent, m.group(0))
+            _reap_attachments(entries_file.parent, m.group(0), new_text)
     return True

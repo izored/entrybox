@@ -140,7 +140,23 @@ def build_annotation(agent: dict, project: dict, host: str = "localhost", port: 
             f"### Setting state\n\n"
             f"CLI: {cli}\n"
             f'API: PATCH {url}/api/projects/{pid}/entries  {{"id": "{eid}", "state": "wip"}}\n\n'
-            f"States: logged, review, wip, done, error.\n"
+            f"States: logged, review, wip, done, error.\n\n"
+            f"### Optional entry fields\n\n"
+            f"Entries can carry priority, due date, and recurrence. Read them from\n"
+            f"`.entrybox/entries.md` — they appear in the header line as\n"
+            f"`· pri:A · due:2026-06-15 · recur:weekly`.\n\n"
+            f"| Field | Values | Meaning |\n"
+            f"|-------|--------|---------|\n"
+            f"| `priority` | A, B, C | A = urgent, C = low |\n"
+            f"| `due` | YYYY-MM-DD | Due date |\n"
+            f"| `recur` | daily / weekly / monthly / yearly | Auto-relogs on done |\n\n"
+            f"Set or clear via API (pass `\"\"` to clear):\n"
+            f'API: PATCH {url}/api/projects/{pid}/entries  {{"id": "{eid}", "priority": "A", "due": "2026-06-15"}}\n\n'
+            f"When the user says things like \"mark this high priority\", \"set due date to\n"
+            f"Friday\", or \"make this repeat weekly\" — update the relevant field.\n"
+            f"When creating an entry you can include these fields in the POST body.\n"
+            f"When a recurring entry is marked done, EntryBox auto-creates the next\n"
+            f"occurrence — you don't need to do anything extra.\n"
             f"{em}\n"
         )
     else:
@@ -157,6 +173,12 @@ def build_annotation(agent: dict, project: dict, host: str = "localhost", port: 
             f"#  5. On confirmation set `wip`, do the work.\n"
             f"#  6. Set `done` when finished, or `error` if blocked.\n"
             f"# Set state: {cli}\n"
+            f"#\n"
+            f"# Optional fields: priority (A/B/C), due (YYYY-MM-DD), recur (daily/weekly/monthly/yearly).\n"
+            f"# Read from header: ## ID · ts · type · state · pri:A · due:2026-06-15 · recur:weekly — title\n"
+            f'# Set: PATCH {url}/api/projects/{pid}/entries  {{"id": "ID", "priority": "A", "due": "2026-06-15"}}\n'
+            f"# If user says 'high priority' / 'due Friday' / 'repeat weekly' — update the field.\n"
+            f"# Recurring entries auto-resubmit when marked done.\n"
             f"{em}\n"
         )
 

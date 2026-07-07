@@ -9,7 +9,7 @@ Lightweight idea, feedback, and fix tracking for any project. Markdown-native, m
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL%20v3-3b9eff?style=flat-square)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3b9eff?style=flat-square)](https://www.python.org/)
 [![Local-first](https://img.shields.io/badge/local--first-no%20account-6bcb77?style=flat-square)](#security)
-[![Release](https://img.shields.io/badge/release-v1.5.0-6bcb77?style=flat-square)](CHANGELOG.md)
+[![Release](https://img.shields.io/badge/release-v1.5.1-6bcb77?style=flat-square)](CHANGELOG.md)
 
 </div>
 
@@ -247,20 +247,40 @@ Base URL: `http://localhost:3859`. All bodies are JSON.
 | Method | Endpoint | Body | Purpose |
 |--------|----------|------|---------|
 | `GET` | `/api/projects/{id}/entries` | none | List entries |
-| `POST` | `/api/projects/{id}/entries` | `{title, type?, body?}` | Create an entry |
-| `PATCH` | `/api/projects/{id}/entries` | `{id, state}` | Change an entry's state |
+| `POST` | `/api/projects/{id}/entries` | `{title, type?, body?, priority?, due?, recur?}` | Create an entry |
+| `PATCH` | `/api/projects/{id}/entries` | `{id, state?, title?, body?, type?, priority?, due?, recur?}` | Update state and/or content |
 | `DELETE` | `/api/projects/{id}/entries` | `{id}` | Delete an entry |
 
+Optional entry fields:
+
+| Field | Values | Behaviour |
+|-------|--------|-----------|
+| `priority` | `A` `B` `C` | A = high urgency, C = low |
+| `due` | `YYYY-MM-DD` | Due date; urgency-coloured in the UI |
+| `recur` | `daily` `weekly` `monthly` `yearly` | When marked `done`, a fresh entry is auto-created with the next due date |
+
+Pass an empty string to clear a field (`"priority": ""`).
+
 ```bash
-# Log an entry
+# Log an entry with priority and due date
 curl -X POST http://localhost:3859/api/projects/myproject/entries \
   -H 'Content-Type: application/json' \
-  -d '{"title": "Dark mode flickers on load", "type": "fix"}'
+  -d '{"title": "Ship the release", "type": "roadmap", "priority": "A", "due": "2026-06-10"}'
 
-# Mark it done
+# Log a recurring weekly entry
+curl -X POST http://localhost:3859/api/projects/myproject/entries \
+  -H 'Content-Type: application/json' \
+  -d '{"title": "Review deps", "type": "improve", "recur": "weekly", "due": "2026-06-07"}'
+
+# Mark it done (auto-creates the next recurrence)
 curl -X PATCH http://localhost:3859/api/projects/myproject/entries \
   -H 'Content-Type: application/json' \
   -d '{"id": "MY-0001", "state": "done"}'
+
+# Set priority and due on an existing entry
+curl -X PATCH http://localhost:3859/api/projects/myproject/entries \
+  -H 'Content-Type: application/json' \
+  -d '{"id": "MY-0002", "priority": "B", "due": "2026-06-15"}'
 ```
 
 ### Projects
@@ -289,6 +309,7 @@ curl -X PATCH http://localhost:3859/api/projects/myproject/entries \
 | `GET` | `/api/themes/{id}` | One theme and vars |
 | `GET` | `/api/config` | App config (booted, onboarded, theme, and more) |
 | `PATCH` | `/api/config` | Update app config |
+| `GET` | `/api/network` | LAN IP addresses and port (for local-network clients) |
 
 ### Webhooks
 
@@ -488,6 +509,8 @@ Copy `.env.example` to `.env` and adjust:
 | `ENTRYBOX_DATA_DIR` | `./data` | Where `entrybox.json` is stored |
 | `ENTRYBOX_THEME` | `dark` | Active theme on a fresh install |
 | `ENTRYBOX_WEBHOOK_URL` | _(unset)_ | Global webhook endpoint |
+| `ENTRYBOX_MAX_UPLOAD_MB` | `25` | Max attachment size (MB), upload + serving |
+| `ENTRYBOX_TOKEN` | _(unset)_ | Shared secret; gates file/tree/attachment routes via `X-EntryBox-Token` |
 
 ---
 

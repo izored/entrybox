@@ -11,6 +11,9 @@ WEBHOOK_URL = os.getenv("ENTRYBOX_WEBHOOK_URL", "")
 # Optional shared secret. When set, sensitive routes (file read, tree,
 # attachment upload) require header X-EntryBox-Token to match.
 TOKEN = os.getenv("ENTRYBOX_TOKEN", "")
+# Max attachment size (upload + serve). Bump via env for larger files.
+MAX_UPLOAD_MB = int(os.getenv("ENTRYBOX_MAX_UPLOAD_MB", "25"))
+MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 
 _STATE_FILE = DATA_DIR / "entrybox.json"
 

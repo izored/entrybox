@@ -31,6 +31,8 @@ Copy `.env.example` to `.env`. Key vars:
 | `ENTRYBOX_DATA_DIR` | `./data` | Where `entrybox.json` lives |
 | `ENTRYBOX_THEME` | `dark` | Active theme ID |
 | `ENTRYBOX_WEBHOOK_URL` | _(none)_ | Global webhook for state-change events |
+| `ENTRYBOX_MAX_UPLOAD_MB` | `25` | Max attachment size (MB), upload + serving |
+| `ENTRYBOX_TOKEN` | _(none)_ | Shared secret gating file/tree/attachment routes |
 
 ## Architecture
 

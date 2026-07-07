@@ -147,5 +147,45 @@ class TestDuplicateIdRepair(ParserBase):
         self.assertEqual(len(set(ids)), 2, f"duplicate IDs not repaired: {ids}")
 
 
+class TestAttachmentReaping(ParserBase):
+    """delete_entry must not delete attachments other entries still reference."""
+
+    def _setup_shared(self):
+        eb = self.tmp / ".entrybox"
+        att = eb / "attachments"
+        att.mkdir(parents=True)
+        f = eb / "entries.md"
+        # shared.png used by TST-0001 and TST-0002; solo.png only by TST-0003.
+        f.write_text(
+            f"# {PFX} — EntryBox\n\nManaged by EntryBox.\n\n"
+            "## TST-0001 · 2026-05-01 10:00 · idea · logged — one\n\n"
+            "![s](attachments/shared.png)\n\n"
+            "## TST-0002 · 2026-05-01 11:00 · idea · logged — two\n\n"
+            "![s](attachments/shared.png)\n\n"
+            "## TST-0003 · 2026-05-01 12:00 · idea · logged — three\n\n"
+            "![x](attachments/solo.png)\n",
+            encoding="utf-8",
+        )
+        (att / "shared.png").write_bytes(b"PNG")
+        (att / "solo.png").write_bytes(b"PNG")
+        return f, att
+
+    def test_shared_attachment_kept_when_one_referrer_deleted(self):
+        f, att = self._setup_shared()
+        E.delete_entry(f, PFX, "TST-0001")
+        self.assertTrue((att / "shared.png").is_file(), "shared attachment wrongly reaped")
+
+    def test_attachment_reaped_when_last_referrer_deleted(self):
+        f, att = self._setup_shared()
+        E.delete_entry(f, PFX, "TST-0001")
+        E.delete_entry(f, PFX, "TST-0002")
+        self.assertFalse((att / "shared.png").is_file(), "attachment not reaped after last referrer gone")
+
+    def test_solo_attachment_reaped(self):
+        f, att = self._setup_shared()
+        E.delete_entry(f, PFX, "TST-0003")
+        self.assertFalse((att / "solo.png").is_file(), "solo attachment should be reaped")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

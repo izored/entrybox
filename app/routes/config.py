@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.config import get_state, update_state
+from app.config import get_state, update_state, MAX_UPLOAD_BYTES
 
 router = APIRouter(prefix="/api/config")
 
@@ -13,6 +13,7 @@ async def get_config():
         "theme": state.get("theme", "dark"),
         "ai_tools": state.get("ai_tools", []),
         "auto_write_agent_config": state.get("auto_write_agent_config", True),
+        "max_upload_bytes": MAX_UPLOAD_BYTES,
     }
 
 

@@ -7,11 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.5.1] - 2026-06-04
-
-> _Status: in active development (updated 2026-06-14)._
-
-### Also queued for this session (after 1.5.1)
+## Unreleased / Planned
 
 - **N6** file-tree UI + file-scoped entries (backend already built in v1.5.0)
 - **N4** Chrome extension (MV3: popup, context-menu, screenshot→attachment)
@@ -20,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **P3** search / filter bar
 - **P4** resurfacing / snooze (stale-badge + saved filter)
 - **P6** resolution link on done (commit / PR / file ref)
+
+---
+
+## [1.5.1] - 2026-06-04
 
 ### Added
 
@@ -339,9 +339,8 @@ First public release.
   `projects`, `add-project`, `themes`, `set-theme`.
 - File locking (`filelock`) around all `entries.md` reads and writes to prevent
   races between the UI and the CLI.
-- Docker support (single-project mode) and Python standalone (multi-project).
 - One-click start scripts: `run.bat` (Windows) and `run.sh` (macOS/Linux).
 
 ---
 
-[1.0.0]: https://github.com/<your-org>/entrybox/releases/tag/v1.0.0
+[1.0.0]: https://github.com/izored/EntryBox/releases/tag/v1.0.0

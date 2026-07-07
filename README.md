@@ -9,17 +9,18 @@ Lightweight idea, feedback, and fix tracking for any project. Markdown-native, m
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL%20v3-3b9eff?style=flat-square)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3b9eff?style=flat-square)](https://www.python.org/)
 [![Local-first](https://img.shields.io/badge/local--first-no%20account-6bcb77?style=flat-square)](#security)
-[![Release](https://img.shields.io/badge/release-v1.5.1-6bcb77?style=flat-square)](CHANGELOG.md)
+[![Release](https://img.shields.io/badge/release-v1.5.2-6bcb77?style=flat-square)](CHANGELOG.md)
 
 </div>
 
 ---
 
+<!-- screenshot-main.png pending — see assets/SHOTLIST.md. Uncomment when captured:
 <div align="center">
 <img src="assets/screenshot-main.png" alt="EntryBox main interface" width="800">
-<br>
-<sub>Capture this screenshot before release. See <a href="assets/SHOTLIST.md">assets/SHOTLIST.md</a>.</sub>
 </div>
+-->
+
 
 ---
 
@@ -393,7 +394,7 @@ see a clear offline state with the launch command.
 
 ```
 GET http://localhost:3859/health
-→ 200  { "status": "ok", "version": "1.0.0" }
+→ 200  { "status": "ok", "version": "1.5.2" }
 ```
 
 **Alpine.js pattern** (drop into any Alpine component):
@@ -487,11 +488,13 @@ checkEntryBox()
 - **Loading HTML in an `<iframe>` has no CORS restriction** — the iframe
   itself works without any CORS config.
 - **JavaScript `fetch()` from a host app to `localhost:3859` IS cross-origin**
-  (different port). EntryBox includes `Access-Control-Allow-Origin: *` on all
-  endpoints, so health checks and API calls from parent apps work out of the box.
-  If for any reason you need a zero-read health check (opaque response is
-  sufficient), use `mode: 'no-cors'` — the fetch rejects only on connection
-  refused (server down), resolves on any HTTP response (server up).
+  (different port). EntryBox allows cross-origin reads only from
+  `localhost` / `127.0.0.1` origins (any port) and browser extensions — so a
+  host app served from localhost works out of the box, while arbitrary
+  websites cannot read your entries. If your host page is not on a localhost
+  origin, use the iframe (not subject to CORS) or a zero-read health check
+  with `mode: 'no-cors'` — the fetch rejects only on connection refused
+  (server down), resolves on any HTTP response (server up).
 - Updates to EntryBox (new features, theme changes) propagate automatically to
   every embed — the iframe always fetches the latest HTML from the running
   server. No changes needed in host apps.
@@ -507,7 +510,6 @@ Copy `.env.example` to `.env` and adjust:
 | `ENTRYBOX_BIND` | `127.0.0.1` | Server bind address (keep local) |
 | `ENTRYBOX_PORT` | `3859` | Server port |
 | `ENTRYBOX_DATA_DIR` | `./data` | Where `entrybox.json` is stored |
-| `ENTRYBOX_THEME` | `dark` | Active theme on a fresh install |
 | `ENTRYBOX_WEBHOOK_URL` | _(unset)_ | Global webhook endpoint |
 | `ENTRYBOX_MAX_UPLOAD_MB` | `25` | Max attachment size (MB), upload + serving |
 | `ENTRYBOX_TOKEN` | _(unset)_ | Shared secret; gates file/tree/attachment routes via `X-EntryBox-Token` |
@@ -531,9 +533,10 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 ## Roadmap
 
-v1.0 ships the full core described above. Next: a zero-dependency single-HTML
-mode, richer webhooks, GitHub Issues sync, a VS Code extension, and a community
-themes gallery. Full detail in [ROADMAP.md](../ROADMAP.md).
+v1.0 shipped the full core described above. Next: a file-tree UI, a search /
+filter bar, a Chrome extension, richer webhooks, and a community themes
+gallery. See the **Unreleased / Planned** section of
+[CHANGELOG.md](CHANGELOG.md) for the live queue.
 
 ---
 

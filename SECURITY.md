@@ -4,8 +4,8 @@
 
 | Version | Supported |
 |---------|-----------|
-| 1.0.x   | Yes       |
-| < 1.0   | No        |
+| 1.5.x   | Yes       |
+| < 1.5   | No        |
 
 ## Threat model
 

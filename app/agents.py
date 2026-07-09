@@ -1,6 +1,9 @@
+import logging
 import re
 from pathlib import Path
-from app.config import get_state, update_state
+from app.config import PORT, get_state, update_state
+
+logger = logging.getLogger("entrybox")
 
 BUILT_IN_AGENTS = [
     {
@@ -46,6 +49,26 @@ BUILT_IN_AGENTS = [
         "start_marker": "# EntryBox",
         "end_marker": "# /EntryBox",
         "template": "comment",
+        "built_in": True,
+    },
+    {
+        # The emerging cross-vendor standard: OpenAI Codex, Kimi, Amp, Jules,
+        # Zed, Factory and others all read AGENTS.md.
+        "id": "agents-md",
+        "name": "AGENTS.md (Codex, Kimi & others)",
+        "config_file": "AGENTS.md",
+        "start_marker": "<!-- EntryBox -->",
+        "end_marker": "<!-- /EntryBox -->",
+        "template": "markdown",
+        "built_in": True,
+    },
+    {
+        "id": "gemini-cli",
+        "name": "Gemini CLI",
+        "config_file": "GEMINI.md",
+        "start_marker": "<!-- EntryBox -->",
+        "end_marker": "<!-- /EntryBox -->",
+        "template": "markdown",
         "built_in": True,
     },
 ]
@@ -105,7 +128,7 @@ def detect_agents_in_project(root_dir: Path) -> list[str]:
     return found
 
 
-def build_annotation(agent: dict, project: dict, host: str = "localhost", port: int = 3859) -> str:
+def build_annotation(agent: dict, project: dict, host: str = "localhost", port: int | None = None) -> str:
     """The instruction block written into an agent's config file.
 
     It is a playbook, not just an API reference: it tells the agent how to
@@ -113,7 +136,7 @@ def build_annotation(agent: dict, project: dict, host: str = "localhost", port: 
     pid = project["id"]
     prefix = project["prefix"]
     name = project["name"]
-    url = f"http://{host}:{port}"
+    url = f"http://{host}:{port or PORT}"
     sm, em = agent["start_marker"], agent["end_marker"]
     eid = f"{prefix}-0039"
     cli = f"python <entrybox>/cli/entrybox.py update-state --project {pid} --id {eid} --state wip"
@@ -183,78 +206,188 @@ def build_annotation(agent: dict, project: dict, host: str = "localhost", port: 
         )
 
 
-def _legacy_block_pattern(agent: dict) -> re.Pattern:
-    """Matches a hand-written EntryBox block that has NO marker tags.
+# ── Managed-block plumbing ────────────────────────────────────────────────────
+# The config files this module writes into (CLAUDE.md, .cursorrules, …) are
+# living files, edited by the user AND by the agents themselves. Marker
+# integrity can never be assumed. The rule everything below follows:
+#
+#   Exactly one well-formed marker pair  → replace the block in place.
+#   No markers                           → adopt a legacy block, or append.
+#   Anything else (orphan / reversed /
+#   duplicated markers, undecodable)     → touch NOTHING, report it.
 
-    Used to adopt instructions a user (or a past EntryBox version) wrote
-    manually, so re-registering never appends a duplicate.
+
+def _marker_line_re(marker: str) -> re.Pattern:
+    # Line-anchored: "# EntryBox" must not match inside "# EntryBox rules".
+    return re.compile(rf"^[ \t]*{re.escape(marker)}[ \t]*$", re.MULTILINE)
+
+
+def marker_state(agent: dict, text: str) -> str:
+    """'ok' (exactly one well-ordered pair), 'none', or 'broken'."""
+    sms = list(_marker_line_re(agent["start_marker"]).finditer(text))
+    ems = list(_marker_line_re(agent["end_marker"]).finditer(text))
+    if not sms and not ems:
+        return "none"
+    if len(sms) == 1 and len(ems) == 1 and sms[0].start() < ems[0].start():
+        return "ok"
+    return "broken"
+
+
+def _block_span(agent: dict, text: str) -> tuple[int, int]:
+    """Span of the managed block (marker_state must be 'ok'). End includes the
+    trailing newline of the end-marker line when present."""
+    sm = _marker_line_re(agent["start_marker"]).search(text)
+    em = _marker_line_re(agent["end_marker"]).search(text)
+    end = em.end()
+    if text[end:end + 1] == "\n":
+        end += 1
+    return sm.start(), end
+
+
+def _find_legacy_span(agent: dict, text: str) -> tuple[int, int] | None:
+    """Span of a hand-written, marker-less EntryBox block, or None.
+
+    Markdown: a heading line that is exactly 'EntryBox' or starts with
+    'EntryBox Integration', ending at the next heading of the SAME OR HIGHER
+    level (standard section semantics — an inner '###' no longer truncates
+    the match and leaves fragments behind).
+    Comment style: the heading line plus contiguous '#' comment lines.
     """
+    head = r"EntryBox(?: Integration\b[^\n]*)?"
     if agent.get("template") == "markdown":
-        # Heading up to the next markdown heading or end of file.
-        return re.compile(
-            r"\n*#{2,} EntryBox Integration\b.*?(?=\n#{1,6} |\Z)", re.DOTALL
-        )
-    # Comment style: heading + contiguous comment lines (stops at blank/non-#).
-    return re.compile(r"\n*#+ EntryBox Integration\b(?:\n#[^\n]*)*")
+        m = re.search(rf"^(#{{1,6}}) {head}[ \t]*$", text, re.MULTILINE)
+        if not m:
+            return None
+        level = len(m.group(1))
+        nxt = re.compile(rf"^#{{1,{level}}} ", re.MULTILINE).search(text, m.end())
+        return m.start(), (nxt.start() if nxt else len(text))
+    m = re.search(rf"^#+ {head}[ \t]*$(?:\n#[^\n]*)*", text, re.MULTILINE)
+    return (m.start(), m.end()) if m else None
+
+
+def _read_config(config_file: Path) -> tuple[str, bool] | None:
+    """Decode strictly and normalize line endings for processing.
+
+    Returns (text_with_LF, had_crlf), or None when the file is not valid
+    UTF-8 — in that case we must never rewrite it (errors='replace' would
+    permanently mojibake every non-UTF-8 byte in the user's file)."""
+    try:
+        text = config_file.read_bytes().decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    crlf = "\r\n" in text
+    if crlf:
+        text = text.replace("\r\n", "\n")
+    return text, crlf
+
+
+def _write_config(config_file: Path, text: str, crlf: bool) -> None:
+    """Atomic replace with a .bak snapshot, preserving the file's own line
+    endings (newline='' disables translation — a user's LF file must not come
+    back CRLF just because the server runs on Windows)."""
+    from app.entries import _write_atomic
+    out = text.replace("\n", "\r\n") if crlf else text
+    _write_atomic(config_file, out, backup=True, newline="")
+
+
+def valid_custom_annotation(agent: dict, text: str) -> bool:
+    """True when user-edited annotation text still carries exactly one
+    well-formed marker pair (so future updates/removal keep working)."""
+    return marker_state(agent, text.replace("\r\n", "\n")) == "ok"
 
 
 def annotation_status(agent: dict, config_file: Path) -> str:
-    """Returns 'none', 'marked' (managed block present) or 'legacy'
-    (EntryBox instructions present but with no marker tags)."""
+    """'none' | 'marked' | 'broken' (damaged markers — EntryBox will not
+    touch the file) | 'legacy' (marker-less hand-written block) |
+    'unreadable' (not UTF-8)."""
     if not config_file.exists():
         return "none"
-    text = config_file.read_text(encoding="utf-8", errors="replace")
-    if agent["start_marker"] in text and agent["end_marker"] in text:
+    loaded = _read_config(config_file)
+    if loaded is None:
+        return "unreadable"
+    text, _ = loaded
+    state = marker_state(agent, text)
+    if state == "ok":
         return "marked"
-    if _legacy_block_pattern(agent).search(text):
+    if state == "broken":
+        return "broken"
+    if _find_legacy_span(agent, text):
         return "legacy"
     return "none"
 
 
-def write_annotation(agent: dict, project: dict, config_file: Path, annotation: str) -> None:
-    sm = agent["start_marker"]
-    em = agent["end_marker"]
+def write_annotation(agent: dict, project: dict, config_file: Path, annotation: str) -> str:
+    """Write/refresh the managed block. Never destroys user content: with
+    damaged markers or a non-UTF-8 file the file is left byte-identical.
+
+    Returns: 'created' | 'replaced' | 'replaced_other' (replaced a block that
+    belonged to a different project — same root registered twice) |
+    'adopted' | 'appended' | 'skipped_broken' | 'skipped_unreadable'.
+    """
+    annotation = annotation.replace("\r\n", "\n").rstrip("\n") + "\n"
 
     if not config_file.exists():
         config_file.parent.mkdir(parents=True, exist_ok=True)
-        config_file.write_text(annotation, encoding="utf-8")
-        return
+        config_file.write_text(annotation, encoding="utf-8", newline="")
+        return "created"
 
-    text = config_file.read_text(encoding="utf-8", errors="replace")
+    loaded = _read_config(config_file)
+    if loaded is None:
+        logger.warning("%s is not valid UTF-8 — annotation not written", config_file)
+        return "skipped_unreadable"
+    text, crlf = loaded
 
-    if sm in text and em in text:
-        # Re-register / re-assign: replace the managed block in place.
-        pattern = re.compile(rf"{re.escape(sm)}.*?{re.escape(em)}\n?", re.DOTALL)
-        new_text = pattern.sub(lambda _m: annotation, text, count=1)
-    else:
-        legacy = _legacy_block_pattern(agent).search(text)
-        if legacy:
-            # Adopt a hand-written block: replace it with a marked one.
-            before = text[: legacy.start()].rstrip("\n")
-            after = text[legacy.end():].lstrip("\n")
-            parts = [p for p in (before, annotation.rstrip("\n"), after) if p]
-            new_text = "\n\n".join(parts) + "\n"
-        else:
-            new_text = text.rstrip("\n") + "\n\n" + annotation
+    state = marker_state(agent, text)
+    if state == "broken":
+        logger.warning("%s has damaged EntryBox markers — annotation not written "
+                       "(fix or delete the stray marker lines)", config_file)
+        return "skipped_broken"
 
-    config_file.write_text(new_text, encoding="utf-8")
+    if state == "ok":
+        start, end = _block_span(agent, text)
+        old_block = text[start:end]
+        _write_config(config_file, text[:start] + annotation + text[end:], crlf)
+        m = re.search(r"Prefix: (\S+)", old_block)
+        if m and m.group(1) != project.get("prefix"):
+            return "replaced_other"
+        return "replaced"
+
+    legacy = _find_legacy_span(agent, text)
+    if legacy:
+        before = text[:legacy[0]].rstrip("\n")
+        after = text[legacy[1]:].lstrip("\n")
+        parts = [p for p in (before, annotation.rstrip("\n"), after) if p]
+        _write_config(config_file, "\n\n".join(parts) + "\n", crlf)
+        return "adopted"
+
+    _write_config(config_file, text.rstrip("\n") + "\n\n" + annotation, crlf)
+    return "appended"
 
 
 def remove_annotation(agent: dict, config_file: Path) -> bool:
     if not config_file.exists():
         return False
-    sm = agent["start_marker"]
-    em = agent["end_marker"]
-    text = config_file.read_text(encoding="utf-8", errors="replace")
+    loaded = _read_config(config_file)
+    if loaded is None:
+        logger.warning("%s is not valid UTF-8 — annotation not removed", config_file)
+        return False
+    text, crlf = loaded
 
-    if sm in text and em in text:
-        pattern = re.compile(rf"\n?{re.escape(sm)}.*?{re.escape(em)}\n?", re.DOTALL)
-        new_text = pattern.sub("", text)
-    else:
-        # No markers: fall back to removing a hand-written block if present.
-        new_text, n = _legacy_block_pattern(agent).subn("", text)
-        if n == 0:
-            return False
+    state = marker_state(agent, text)
+    if state == "broken":
+        logger.warning("%s has damaged EntryBox markers — annotation not removed", config_file)
+        return False
 
-    config_file.write_text(new_text.rstrip("\n") + "\n", encoding="utf-8")
+    if state == "ok":
+        start, end = _block_span(agent, text)
+        new_text = text[:start].rstrip("\n") + "\n\n" + text[end:].lstrip("\n")
+        new_text = new_text.strip("\n")
+        _write_config(config_file, (new_text + "\n") if new_text else "", crlf)
+        return True
+
+    legacy = _find_legacy_span(agent, text)
+    if legacy is None:
+        return False
+    new_text = (text[:legacy[0]].rstrip("\n") + "\n\n" + text[legacy[1]:].lstrip("\n")).strip("\n")
+    _write_config(config_file, (new_text + "\n") if new_text else "", crlf)
     return True

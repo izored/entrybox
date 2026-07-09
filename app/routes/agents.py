@@ -3,7 +3,10 @@ from pathlib import PurePosixPath
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
-from app.agents import get_all_agents, get_agent, add_learned_agent, remove_learned_agent, BUILT_IN_AGENTS
+from app.agents import (
+    get_all_agents, get_agent, add_learned_agent, remove_learned_agent,
+    build_annotation, BUILT_IN_AGENTS,
+)
 
 router = APIRouter(prefix="/api/agents")
 
@@ -43,6 +46,22 @@ async def add_agent(body: dict):
         template = "markdown"
     agent = add_learned_agent(name, config_file, template)
     return {"ok": True, "agent": agent}
+
+
+@router.post("/preview")
+async def preview_annotation(body: dict):
+    """Stateless annotation preview for a not-yet-registered project. Keeps
+    the server as the single source of truth for the block — the UI must not
+    maintain its own copy of the template (it drifts)."""
+    agent = get_agent((body.get("agent_id") or "").strip())
+    if not agent:
+        return JSONResponse({"error": "agent not found"}, status_code=404)
+    proj = {
+        "id": (body.get("id") or "myproject").strip() or "myproject",
+        "name": (body.get("name") or "My Project").strip() or "My Project",
+        "prefix": ((body.get("prefix") or "ENTRY").strip() or "ENTRY").upper(),
+    }
+    return {"annotation": build_annotation(agent, proj), "config_file": agent["config_file"]}
 
 
 @router.delete("/{agent_id}")

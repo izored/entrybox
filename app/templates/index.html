@@ -784,6 +784,17 @@
       </div>
     </div>
 
+    <!-- Broken markers notice -->
+    <div class="modal-section" x-show="addProjectModal.brokenAgents.length > 0" x-cloak>
+      <div class="modal-notice">
+        ⚠ Damaged EntryBox markers in
+        <strong x-text="brokenAgentNames()"></strong>
+        (a stray, duplicated, or out-of-order marker line). EntryBox will not
+        touch these files until the markers are fixed or removed — your content
+        is left exactly as it is.
+      </div>
+    </div>
+
     <!-- Annotation preview (tabbed) -->
     <div class="modal-section" x-show="addProjectModal.agent_ids.length > 0">
       <div class="modal-section-label">
@@ -1007,7 +1018,7 @@ function entrybox() {
     addProjectModal: {
       open: false, name: '', root_dir: '', prefix: 'ENTRY', id: '', color: '#3b9eff',
       agent_ids: [], annotations: {}, activeTab: '', autoWrite: true, migrate_from: null,
-      legacyAgents: [],
+      legacyAgents: [], brokenAgents: [],
     },
     addAgentModal: { open: false, name: '', config_file: '', template: 'markdown' },
     deleteModal: { open: false, entry: null },
@@ -1553,7 +1564,7 @@ function entrybox() {
         agent_ids: [...(this.config.ai_tools || [])],
         annotations: {}, activeTab: this.config.ai_tools?.[0] || '',
         autoWrite: this.config.auto_write_agent_config !== false,
-        migrate_from: null, legacyAgents: [],
+        migrate_from: null, legacyAgents: [], brokenAgents: [],
       };
       this.generateModalAnnotations();
     },
@@ -1571,17 +1582,17 @@ function entrybox() {
       this.generateModalAnnotations();
     },
 
-    generateModalAnnotations() {
+    async generateModalAnnotations() {
       const proj = {
         id: this.addProjectModal.id || this.addProjectModal.prefix.toLowerCase(),
         name: this.addProjectModal.name || 'My Project',
         prefix: this.addProjectModal.prefix || 'ENTRY',
       };
-      this.addProjectModal.agent_ids.forEach(aid => {
+      await Promise.all(this.addProjectModal.agent_ids.map(async aid => {
         if (!this.addProjectModal.annotations[aid]) {
-          this.addProjectModal.annotations[aid] = this._buildAnnotation(aid, proj);
+          this.addProjectModal.annotations[aid] = await this._fetchAnnotation(aid, proj);
         }
-      });
+      }));
     },
 
     async scanProjectAgents() {
@@ -1591,6 +1602,7 @@ function entrybox() {
         body: JSON.stringify({ root_dir: this.addProjectModal.root_dir }),
       }).then(r => r.json()).catch(() => ({ found_agent_ids: [] }));
       this.addProjectModal.legacyAgents = data.legacy_agent_ids || [];
+      this.addProjectModal.brokenAgents = data.broken_agent_ids || [];
       if (data.found_agent_ids?.length) {
         data.found_agent_ids.forEach(aid => {
           if (!this.addProjectModal.agent_ids.includes(aid))
@@ -1608,16 +1620,28 @@ function entrybox() {
         .join(', ');
     },
 
+    brokenAgentNames() {
+      return (this.addProjectModal.brokenAgents || [])
+        .map(aid => this.agentById(aid)?.config_file || aid)
+        .join(', ');
+    },
+
     async submitAddProject() {
       const m = this.addProjectModal;
       if (!m.name.trim() || !m.root_dir.trim()) return;
       const projectId = m.id.trim() || m.prefix.toLowerCase();
+      // Send the (possibly user-edited) annotation previews — the server
+      // honors them when the markers are still intact, else falls back to
+      // the canonical block.
+      const annotations = {};
+      m.agent_ids.forEach(aid => { if (m.annotations[aid]) annotations[aid] = m.annotations[aid]; });
       const payload = {
         id: projectId, name: m.name, root_dir: m.root_dir,
         prefix: m.prefix.toUpperCase(), color: m.color,
         agent_ids: m.autoWrite ? m.agent_ids : [],
         auto_write: m.autoWrite,
         migrate_from: m.migrate_from || null,
+        annotations,
       };
       const resp = await fetch('/api/projects', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1625,9 +1649,29 @@ function entrybox() {
       }).then(r => r.json()).catch(() => null);
       if (resp?.ok) {
         m.open = false;
+        this._toastAnnotationResults(resp.annotation_results);
         await this.loadProjects();
         this.activeProjectId = projectId;
         await this.loadEntries();
+      } else if (resp?.error) {
+        this.showToast(resp.error);
+      }
+    },
+
+    // Surface what actually happened to the user's config files — never
+    // silently skip or overwrite.
+    _toastAnnotationResults(results) {
+      if (!results) return;
+      const file = aid => this.agentById(aid)?.config_file || aid;
+      const skipped = Object.entries(results)
+        .filter(([, s]) => s === 'skipped_broken' || s === 'skipped_unreadable');
+      if (skipped.length) {
+        this.showToast(`⚠ Not written (damaged EntryBox markers or unreadable file): ${skipped.map(([a]) => file(a)).join(', ')}`);
+        return;
+      }
+      const other = Object.entries(results).filter(([, s]) => s === 'replaced_other');
+      if (other.length) {
+        this.showToast(`↺ Replaced another project's EntryBox block in ${other.map(([a]) => file(a)).join(', ')} (one block per file)`);
       }
     },
 
@@ -1671,10 +1715,11 @@ function entrybox() {
       const current = [...(this.activeProject.active_agents || [])];
       if (checked && !current.includes(agentId)) current.push(agentId);
       if (!checked) current.splice(current.indexOf(agentId), 1);
-      await fetch(`/api/projects/${this.activeProject.id}/agents`, {
+      const resp = await fetch(`/api/projects/${this.activeProject.id}/agents`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ agent_ids: current, auto_write: this.config.auto_write_agent_config }),
-      });
+      }).then(r => r.json()).catch(() => null);
+      this._toastAnnotationResults(resp?.annotation_results);
       await this.loadProjects();
     },
 
@@ -1699,97 +1744,25 @@ function entrybox() {
       this.generateOnbAnnotations();
     },
 
-    generateOnbAnnotations() {
+    async generateOnbAnnotations() {
       const proj = { id: 'myproject', name: 'My Project', prefix: 'ENTRY' };
-      this.onbSelectedAgents.forEach(aid => {
+      await Promise.all(this.onbSelectedAgents.map(async aid => {
         if (!this.onbAnnotations[aid])
-          this.onbAnnotations[aid] = this._buildAnnotation(aid, proj);
-      });
+          this.onbAnnotations[aid] = await this._fetchAnnotation(aid, proj);
+      }));
       if (!this.onbAnnotationTab && this.onbSelectedAgents.length)
         this.onbAnnotationTab = this.onbSelectedAgents[0];
     },
 
-    _buildAnnotation(agentId, proj) {
-      const agent = this.agentById(agentId);
-      if (!agent) return '';
-      const sm = agent.start_marker, em = agent.end_marker;
-      const eid = `${proj.prefix}-0039`;
-      const cli = `python <entrybox>/cli/entrybox.py update-state --project ${proj.id} --id ${eid} --state wip`;
-      if (agent.template === 'markdown') {
-        return [
-          sm,
-          '## EntryBox',
-          '',
-          'This project tracks ideas, fixes, and feedback in EntryBox.',
-          'Entries live in `.entrybox/entries.md` (plain markdown, read it directly).',
-          `Project: ${proj.name} | Prefix: ${proj.prefix} | Server: http://localhost:3859`,
-          '',
-          '### When the user references an entry',
-          '',
-          `If the user says "check EntryBox ${eid}", "look at entry 39", or`,
-          `"let's work on the entrybox idea about X":`,
-          '',
-          '1. Find it. Read `.entrybox/entries.md` and match the ID. A bare',
-          `   number like "39" means \`${eid}\` (zero-padded, with the prefix).`,
-          '2. Set the state to `review` so the user sees you picked it up.',
-          '3. Read the title and body. Think through scope and approach.',
-          '4. Surface it back: a short summary of the entry and your proposed',
-          '   approach, then ask for a go-ahead. Do not start work yet.',
-          '5. Once the user confirms, set `wip` and do the work.',
-          '6. Set `done` when finished. If blocked, set `error` and say what',
-          '   blocks it.',
-          '',
-          '### Setting state',
-          '',
-          `CLI: ${cli}`,
-          `API: PATCH http://localhost:3859/api/projects/${proj.id}/entries  {"id": "${eid}", "state": "wip"}`,
-          '',
-          'States: logged, review, wip, done, error.',
-          '',
-          '### Optional entry fields',
-          '',
-          'Entries can carry priority, due date, and recurrence. Read them from',
-          '`.entrybox/entries.md` — they appear in the header as `· pri:A · due:2026-06-15 · recur:weekly`.',
-          '',
-          '| Field | Values | Meaning |',
-          '|-------|--------|---------|',
-          '| `priority` | A, B, C | A = urgent, C = low |',
-          '| `due` | YYYY-MM-DD | Due date |',
-          '| `recur` | daily / weekly / monthly / yearly | Auto-relogs on done |',
-          '',
-          'Set or clear via API (pass `""` to clear):',
-          `API: PATCH http://localhost:3859/api/projects/${proj.id}/entries  {"id": "${eid}", "priority": "A", "due": "2026-06-15"}`,
-          '',
-          'When the user says "mark this high priority", "set due date to Friday",',
-          'or "make this repeat weekly" — update the relevant field.',
-          'When creating an entry you can include these fields in the POST body.',
-          'When a recurring entry is marked done, EntryBox auto-creates the next',
-          'occurrence — you do not need to do anything extra.',
-          em,
-        ].join('\n');
-      } else {
-        return [
-          sm,
-          '# Tracks ideas, fixes, feedback. Entries: .entrybox/entries.md (read directly).',
-          `# Project: ${proj.name} | Prefix: ${proj.prefix} | Server: http://localhost:3859`,
-          '#',
-          `# When the user references an entry (e.g. "check EntryBox ${eid}"):`,
-          `#  1. Find it in .entrybox/entries.md. "39" means ${eid}.`,
-          '#  2. Set state `review` so the user sees you picked it up.',
-          '#  3. Read it. Think through the approach.',
-          '#  4. Summarise it to the user and ask for a go-ahead. Do not start yet.',
-          '#  5. On confirmation set `wip`, do the work.',
-          '#  6. Set `done` when finished, or `error` if blocked.',
-          `# Set state: ${cli}`,
-          '#',
-          '# Optional fields: priority (A/B/C), due (YYYY-MM-DD), recur (daily/weekly/monthly/yearly).',
-          '# Read from header: ## ID · ts · type · state · pri:A · due:2026-06-15 · recur:weekly — title',
-          `# Set: PATCH http://localhost:3859/api/projects/${proj.id}/entries  {"id": "ID", "priority": "A", "due": "2026-06-15"}`,
-          "# If user says 'high priority' / 'due Friday' / 'repeat weekly' — update the field.",
-          '# Recurring entries auto-resubmit when marked done.',
-          em,
-        ].join('\n');
-      }
+    // Annotation preview comes from the server — single source of truth for
+    // the block template. (A JS mirror of build_annotation lived here before
+    // and had already drifted from what the server actually wrote.)
+    async _fetchAnnotation(agentId, proj) {
+      const res = await fetch('/api/agents/preview', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent_id: agentId, id: proj.id, name: proj.name, prefix: proj.prefix }),
+      }).then(r => r.json()).catch(() => null);
+      return res?.annotation || '';
     },
 
     goToSlide(i) { this.onbSlide = i; },

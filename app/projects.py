@@ -4,6 +4,7 @@ from app.config import get_state, update_state
 from app.agents import (
     detect_agents_in_project, get_agent, get_all_agents,
     build_annotation, write_annotation, remove_annotation, annotation_status,
+    valid_custom_annotation,
 )
 
 
@@ -34,7 +35,8 @@ def register_project(
     agent_ids: list[str] | None = None,
     auto_write: bool = True,
     migrate_from: str | None = None,
-) -> dict:
+    annotations: dict[str, str] | None = None,
+) -> tuple[dict, dict[str, str]]:
     from datetime import datetime
     from app.entries import ensure_file
 
@@ -68,16 +70,25 @@ def register_project(
     projects.append(project)
     update_state({"projects": projects})
 
+    annotation_results: dict[str, str] = {}
     if auto_write and agent_ids:
         for aid in agent_ids:
             agent = get_agent(aid)
             if not agent:
                 continue
             cfg_path = root / agent["config_file"]
-            annotation = build_annotation(agent, project)
-            write_annotation(agent, project, cfg_path, annotation)
+            # Honor a user-edited block from the UI preview — but only when it
+            # still carries exactly one well-formed marker pair, so future
+            # updates and removal keep working. Otherwise fall back to the
+            # canonical template.
+            custom = (annotations or {}).get(aid)
+            if custom and valid_custom_annotation(agent, custom):
+                annotation = custom
+            else:
+                annotation = build_annotation(agent, project)
+            annotation_results[aid] = write_annotation(agent, project, cfg_path, annotation)
 
-    return project
+    return project, annotation_results
 
 
 def unregister_project(project_id: str, remove_annotations: bool = True) -> bool:
@@ -100,7 +111,8 @@ def unregister_project(project_id: str, remove_annotations: bool = True) -> bool
     return True
 
 
-def update_project_agents(project_id: str, agent_ids: list[str], auto_write: bool = True) -> dict | None:
+def update_project_agents(project_id: str, agent_ids: list[str],
+                          auto_write: bool = True) -> tuple[dict, dict[str, str]] | None:
     project = get_project(project_id)
     if not project:
         return None
@@ -108,6 +120,7 @@ def update_project_agents(project_id: str, agent_ids: list[str], auto_write: boo
     root = Path(project["root_dir"])
     old_agents = set(project.get("active_agents", []))
     new_agents = set(agent_ids)
+    annotation_results: dict[str, str] = {}
 
     if auto_write:
         for aid in new_agents - old_agents:
@@ -115,19 +128,20 @@ def update_project_agents(project_id: str, agent_ids: list[str], auto_write: boo
             if agent:
                 cfg_path = root / agent["config_file"]
                 annotation = build_annotation(agent, project)
-                write_annotation(agent, project, cfg_path, annotation)
+                annotation_results[aid] = write_annotation(agent, project, cfg_path, annotation)
 
         for aid in old_agents - new_agents:
             agent = get_agent(aid)
             if agent:
                 cfg_path = root / agent["config_file"]
-                remove_annotation(agent, cfg_path)
+                removed = remove_annotation(agent, cfg_path)
+                annotation_results[aid] = "removed" if removed else "not_removed"
 
     project["active_agents"] = list(new_agents)
     state = get_state()
     projects = [p if p["id"] != project_id else project for p in state.get("projects", [])]
     update_state({"projects": projects})
-    return project
+    return project, annotation_results
 
 
 def scan_project_agents(root_dir: str) -> list[str]:

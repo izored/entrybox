@@ -47,11 +47,16 @@ async def add_project(body: dict):
     if not Path(root_dir).exists():
         return JSONResponse({"error": "root_dir does not exist"}, status_code=400)
 
-    project = register_project(
+    annotations = body.get("annotations") or {}
+    if not isinstance(annotations, dict):
+        annotations = {}
+
+    project, annotation_results = register_project(
         project_id=project_id, name=name, root_dir=root_dir, prefix=prefix,
         color=color, agent_ids=agent_ids, auto_write=auto_write, migrate_from=migrate_from,
+        annotations={k: v for k, v in annotations.items() if isinstance(v, str)},
     )
-    return {"ok": True, "project": project}
+    return {"ok": True, "project": project, "annotation_results": annotation_results}
 
 
 @router.get("/{project_id}")
@@ -82,6 +87,7 @@ async def scan_agents(project_id: str):
         "found_agent_ids": found,
         "annotation_status": statuses,
         "legacy_agent_ids": [a for a, s in statuses.items() if s == "legacy"],
+        "broken_agent_ids": [a for a, s in statuses.items() if s in ("broken", "unreadable")],
     }
 
 
@@ -98,6 +104,7 @@ async def scan_directory(body: dict):
         "found_agent_ids": found,
         "annotation_status": statuses,
         "legacy_agent_ids": [a for a, s in statuses.items() if s == "legacy"],
+        "broken_agent_ids": [a for a, s in statuses.items() if s in ("broken", "unreadable")],
     }
 
 
@@ -105,17 +112,18 @@ async def scan_directory(body: dict):
 async def set_project_agents(project_id: str, body: dict):
     agent_ids = body.get("agent_ids", [])
     auto_write = body.get("auto_write", True)
-    project = update_project_agents(project_id, agent_ids, auto_write)
-    if project is None:
+    result = update_project_agents(project_id, agent_ids, auto_write)
+    if result is None:
         return JSONResponse({"error": "project not found"}, status_code=404)
-    return {"ok": True, "project": project}
+    project, annotation_results = result
+    return {"ok": True, "project": project, "annotation_results": annotation_results}
 
 
 @router.post("/{project_id}/preview-annotation")
 async def preview_annotation(project_id: str, body: dict):
     agent_id = (body.get("agent_id") or "").strip()
     host = body.get("host", "localhost")
-    port = body.get("port", 3859)
+    port = body.get("port")  # None → server's real configured port
     project = get_project(project_id)
     agent = get_agent(agent_id)
     if not project or not agent:

@@ -9,6 +9,7 @@ running server. Covers the duplicate-ID bug class (date-only stamps),
 round-trip stability, edit isolation, and the new duplicate-ID repair.
 """
 import importlib.util
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -227,6 +228,30 @@ class TestBodyHeadingEscape(ParserBase):
         E.load_entries(self.f, PFX)
         entries = E.load_entries(self.f, PFX)
         self.assertEqual(entries[0]["body"], body)
+
+
+class TestCacheInvalidation(ParserBase):
+    def test_add_entry_visible_even_when_mtime_does_not_advance(self):
+        """NTFS mtime ticks are ~15 ms — on fast machines an append can land in
+        the same tick as the previous cache fill. Writers must invalidate the
+        cache explicitly; simulate the tick collision by pinning mtime back."""
+        E.add_entry(self.f, PFX, "Test", "first", "", "idea")
+        E.load_entries(self.f, PFX)
+        st = self.f.stat()
+        E.add_entry(self.f, PFX, "Test", "second", "", "idea")
+        os.utime(self.f, (st.st_atime, st.st_mtime))
+        entries = E.load_entries(self.f, PFX)
+        self.assertEqual(len(entries), 2, "second entry invisible — stale mtime cache")
+
+    def test_delete_entry_visible_even_when_mtime_does_not_advance(self):
+        E.add_entry(self.f, PFX, "Test", "first", "", "idea")
+        e2 = E.add_entry(self.f, PFX, "Test", "second", "", "idea")
+        E.load_entries(self.f, PFX)
+        st = self.f.stat()
+        E.delete_entry(self.f, PFX, e2["id"])
+        os.utime(self.f, (st.st_atime, st.st_mtime))
+        entries = E.load_entries(self.f, PFX)
+        self.assertEqual(len(entries), 1, "deleted entry still served from stale cache")
 
 
 class TestUpdateStateGuard(ParserBase):

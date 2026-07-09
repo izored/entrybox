@@ -5,6 +5,8 @@ request can never escape the project directory via `..`, an absolute path, a
 drive prefix, or a symlink. This is the single chokepoint for the local
 file-read surface — keep it small and well-tested.
 """
+import os
+import re
 from pathlib import Path
 
 # Directories never walked or surfaced in a project file tree.
@@ -27,6 +29,14 @@ def resolve_in_root(root_dir, relpath: str) -> Path | None:
     inputs are rejected outright.
     """
     if relpath is None:
+        return None
+    # Windows-shaped absolute inputs must be rejected on every OS: on POSIX,
+    # "C:\\x" or "\\\\server\\share" is just a strange relative filename to
+    # pathlib, which would silently pass the checks below.
+    rp = str(relpath)
+    if re.match(r"^[A-Za-z]:", rp) or rp.startswith(("\\\\", "//")):
+        return None
+    if os.name != "nt" and "\\" in rp:
         return None
     try:
         root = Path(root_dir).resolve(strict=True)

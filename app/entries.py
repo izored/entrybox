@@ -260,6 +260,10 @@ def add_entry(entries_file: Path, prefix: str, project_name: str, title: str, bo
                  "priority": priority or None, "due": due or None, "recur": recur or None}
         with open(entries_file, "a", encoding="utf-8") as f:
             f.write("\n" + _entry_text(entry, prefix))
+        # The mtime cache can't be trusted after our own write: on NTFS the
+        # append can land in the same ~15 ms mtime tick as the cache fill
+        # above, making the new entry invisible to the next load.
+        _cache.pop(str(entries_file), None)
     return entry
 
 
@@ -309,6 +313,7 @@ def update_entry_state(entries_file: Path, prefix: str, entry_id: str,
             replacement = rf"\1 · {new_state}\2 —"
         new_text = re.sub(pattern, replacement, text)
         _write_atomic(entries_file, new_text)
+        _cache.pop(str(entries_file), None)
     return entry, old_state
 
 
@@ -387,6 +392,7 @@ def delete_entry(entries_file: Path, prefix: str, entry_id: str) -> bool:
         if new_text == text:
             return False
         _write_atomic(entries_file, new_text)
+        _cache.pop(str(entries_file), None)
         if m:
             _reap_attachments(entries_file.parent, m.group(0), new_text)
     return True

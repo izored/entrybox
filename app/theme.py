@@ -1,6 +1,11 @@
 import json
+import re
 from pathlib import Path
 from app.config import THEMES_DIR, get_state, update_state
+
+# Theme ids map straight to filenames — whitelist the charset so an id like
+# "../data/entrybox" can never read JSON outside themes/.
+_THEME_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 def list_themes() -> list[dict]:
@@ -17,6 +22,8 @@ def list_themes() -> list[dict]:
 
 
 def get_theme(theme_id: str) -> dict | None:
+    if not theme_id or not _THEME_ID.fullmatch(theme_id):
+        return None
     path = THEMES_DIR / f"{theme_id}.json"
     if not path.exists():
         return None

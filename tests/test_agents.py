@@ -100,5 +100,25 @@ class TestRemove(Base):
         self.assertEqual(annotation_status(COMMENT_AGENT, cfg), "none")
 
 
+class TestConfigFileValidation(unittest.TestCase):
+    """API-boundary check: a learned agent's config_file must stay a relative
+    path inside the project root (it is joined as root / config_file, where an
+    absolute right operand replaces the root entirely)."""
+
+    def _err(self, value):
+        from app.routes.agents import validate_config_file
+        return validate_config_file(value)
+
+    def test_absolute_and_traversal_rejected(self):
+        for bad in ("C:\\x\\y.md", "c:/x/y.md", "/etc/rules", "\\\\server\\share\\f.md",
+                    "../outside.md", "a/../../outside.md", "..", "", "x" * 201):
+            self.assertIsNotNone(self._err(bad), f"{bad!r} must be rejected")
+
+    def test_nested_relative_accepted(self):
+        for good in ("CLAUDE.md", ".cursorrules", ".github/copilot-instructions.md",
+                     ".aider.conf.yml", "docs/agent.md"):
+            self.assertIsNone(self._err(good), f"{good!r} must be accepted")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

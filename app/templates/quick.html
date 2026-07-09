@@ -114,7 +114,13 @@ async function loadProjects() {
       $('submit').disabled = true;
       return;
     }
-    sel.innerHTML = usable.map(p => `<option value="${p.id}">${p.name} · ${p.prefix}</option>`).join('');
+    // DOM construction, not innerHTML — project names are user input.
+    sel.replaceChildren(...usable.map(p => {
+      const o = document.createElement('option');
+      o.value = p.id;
+      o.textContent = `${p.name} · ${p.prefix}`;
+      return o;
+    }));
     const last = localStorage.getItem(LAST_KEY);
     if (last && usable.some(p => p.id === last)) sel.value = last;
   } catch (e) {

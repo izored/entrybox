@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -9,6 +10,12 @@ from app.projects import (
 from app.agents import get_all_agents, build_annotation, get_agent
 
 router = APIRouter(prefix="/api/projects")
+
+# The prefix is embedded in the entries-file header grammar
+# (## PREFIX-NNNN · … — title): a `·`, `—`, or whitespace inside it would
+# produce unparseable files. The id appears in URL paths and CLI commands.
+_PREFIX_RE = re.compile(r"^[A-Z][A-Z0-9]{0,11}$")
+_PROJECT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
 
 @router.get("")
@@ -33,6 +40,10 @@ async def add_project(body: dict):
 
     if not name or not root_dir:
         return JSONResponse({"error": "name and root_dir required"}, status_code=400)
+    if not _PREFIX_RE.fullmatch(prefix):
+        return JSONResponse({"error": "prefix must be 1-12 chars: A-Z and digits, starting with a letter"}, status_code=400)
+    if not _PROJECT_ID_RE.fullmatch(project_id):
+        return JSONResponse({"error": "id must be 1-64 chars: lowercase letters, digits, - or _"}, status_code=400)
     if not Path(root_dir).exists():
         return JSONResponse({"error": "root_dir does not exist"}, status_code=400)
 

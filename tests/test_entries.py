@@ -187,5 +187,73 @@ class TestAttachmentReaping(ParserBase):
         self.assertFalse((att / "solo.png").is_file(), "solo attachment should be reaped")
 
 
+class TestBodyHeadingEscape(ParserBase):
+    """A body line shaped like the block separator must not split the entry
+    into a phantom entry (silent data mangling from an ordinary markdown paste)."""
+
+    DATE_BODY = "notes:\n## 2026-01-01 — planning session\nmore text"
+    ID_BODY = "notes:\n## TST-0099 · 2026-01-01 00:00 · idea · logged — fake\nmore text"
+
+    def test_body_with_date_heading_survives_reload(self):
+        E.add_entry(self.f, PFX, "Test", "Meeting notes", self.DATE_BODY, "idea")
+        for _ in range(2):
+            entries = E.load_entries(self.f, PFX)
+        self.assertEqual(len(entries), 1, "phantom entry fabricated from body line")
+        self.assertEqual(entries[0]["body"], self.DATE_BODY, "body did not round-trip")
+
+    def test_body_with_id_heading_survives_reload(self):
+        E.add_entry(self.f, PFX, "Test", "Meeting notes", self.ID_BODY, "idea")
+        for _ in range(2):
+            entries = E.load_entries(self.f, PFX)
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["body"], self.ID_BODY)
+
+    def test_update_entry_preserves_escaped_body(self):
+        e = E.add_entry(self.f, PFX, "Test", "Meeting notes", self.DATE_BODY, "idea")
+        E.update_entry(self.f, PFX, e["id"], title="new title")
+        entries = E.load_entries(self.f, PFX)
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["title"], "new title")
+        self.assertEqual(entries[0]["body"], self.DATE_BODY)
+
+    def test_plain_bodies_unchanged_on_disk(self):
+        E.add_entry(self.f, PFX, "Test", "Normal", "line one\nline two\n\nline four", "idea")
+        raw = self.f.read_text(encoding="utf-8")
+        self.assertNotIn("\\", raw, "escape leaked into a plain body")
+
+    def test_literal_backslash_heading_round_trips(self):
+        body = "\\## 2026-01-01 — user's own literal line"
+        E.add_entry(self.f, PFX, "Test", "Edge", body, "idea")
+        E.load_entries(self.f, PFX)
+        entries = E.load_entries(self.f, PFX)
+        self.assertEqual(entries[0]["body"], body)
+
+
+class TestUpdateStateGuard(ParserBase):
+    def test_update_state_on_mangled_header_returns_none(self):
+        _write(self.tmp, "## TST-0001 · 2026-05-01 10:00 · idea · logged — t\n\nb\n")
+        E.load_entries(self.f, PFX)
+        # Mangle the header separators so neither the parser nor the
+        # state-change regex can match the block.
+        text = self.f.read_text(encoding="utf-8")
+        self.f.write_text(text.replace("· idea · logged —", "| idea | logged —"), encoding="utf-8")
+        E._cache.clear()
+        entry, old = E.update_entry_state(self.f, PFX, "TST-0001", "wip")
+        self.assertIsNone(entry)
+        self.assertIsNone(old)
+        # The unparseable block goes through the migration path: dropped from
+        # the live file but snapshotted to .bak (pre-existing safety net).
+        bak = self.f.with_name(self.f.name + ".bak")
+        self.assertTrue(bak.exists())
+        self.assertIn("| idea | logged —", bak.read_text(encoding="utf-8"))
+
+    def test_same_state_set_is_idempotent_success(self):
+        _write(self.tmp, "## TST-0001 · 2026-05-01 10:00 · idea · wip — t\n\nb\n")
+        entry, old = E.update_entry_state(self.f, PFX, "TST-0001", "wip")
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry["state"], "wip")
+        self.assertEqual(old, "wip")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -67,23 +67,47 @@ def _pad_ts(ts: str | None) -> str | None:
     return ts
 
 
-def _write_atomic(path: Path, text: str, backup: bool = False) -> None:
+# A body line that would match the block separator in _parse_file would split
+# the entry in two on the next load (a phantom entry gets fabricated and the
+# original body is truncated — silent data mangling from an ordinary markdown
+# paste). Neutralize on write with a leading backslash; strip it on parse.
+# Only separator-shaped lines are touched, so normal bodies round-trip
+# byte-identically and stay human-readable.
+def _danger_line(prefix: str) -> str:
+    return rf"## (?:{re.escape(prefix)}-\d+|\d{{4}}-\d{{2}}-\d{{2}})"
+
+
+def _escape_body(body: str, prefix: str) -> str:
+    return re.sub(rf"^(\\*{_danger_line(prefix)})", r"\\\1", body, flags=re.MULTILINE)
+
+
+def _unescape_body(body: str, prefix: str) -> str:
+    return re.sub(rf"^\\(\\*{_danger_line(prefix)})", r"\1", body, flags=re.MULTILINE)
+
+
+def _write_atomic(path: Path, text: str, backup: bool = False,
+                  newline: str | None = None) -> None:
     """Write via temp-file + atomic rename so a crash mid-write can't truncate
     the entries file. With backup=True, snapshot the prior contents to
-    `<file>.bak` first (used for the automatic, unattended migration rewrite)."""
+    `<file>.bak` first (used for the automatic, unattended migration rewrite).
+    newline="" disables newline translation (caller controls line endings —
+    used when rewriting files EntryBox does not own)."""
     if backup and path.exists():
         try:
             shutil.copy2(path, path.with_name(path.name + ".bak"))
         except OSError:
             pass
     tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(text, encoding="utf-8")
+    tmp.write_text(text, encoding="utf-8", newline=newline)
     os.replace(tmp, path)
 
 
 def _parse_block(block: str, prefix: str) -> dict | None:
     block = block.strip()
     pre = re.escape(prefix)
+
+    def body(raw: str) -> str:
+        return _unescape_body(raw.strip(), prefix)
 
     # With done_at: ## PREFIX-NNNN · ts · type · state · done_at [extras] — title
     m = re.match(
@@ -94,7 +118,7 @@ def _parse_block(block: str, prefix: str) -> dict | None:
         ex = _extras(m.group(6))
         return {"id": m.group(1), "timestamp": m.group(2), "type": m.group(3),
                 "state": m.group(4), "done_at": m.group(5), "title": m.group(7).strip(),
-                "body": m.group(8).strip(),
+                "body": body(m.group(8)),
                 "priority": ex.get("pri"), "due": ex.get("due"), "recur": ex.get("recur")}
 
     # Without done_at: ## PREFIX-NNNN · ts · type · state [extras] — title
@@ -106,7 +130,7 @@ def _parse_block(block: str, prefix: str) -> dict | None:
         ex = _extras(m.group(5))
         return {"id": m.group(1), "timestamp": m.group(2), "type": m.group(3),
                 "state": m.group(4), "done_at": None, "title": m.group(6).strip(),
-                "body": m.group(7).strip(),
+                "body": body(m.group(7)),
                 "priority": ex.get("pri"), "due": ex.get("due"), "recur": ex.get("recur")}
 
     # Transitional (no state): ## PREFIX-NNNN · ts · type — title
@@ -117,7 +141,7 @@ def _parse_block(block: str, prefix: str) -> dict | None:
     if m:
         return {"id": m.group(1), "timestamp": m.group(2), "type": m.group(3),
                 "state": "logged", "done_at": None, "title": m.group(4).strip(),
-                "body": m.group(5).strip(),
+                "body": body(m.group(5)),
                 "priority": None, "due": None, "recur": None}
 
     # Old format: ## YYYY-MM-DD HH:MM — title
@@ -125,14 +149,14 @@ def _parse_block(block: str, prefix: str) -> dict | None:
     if m:
         return {"id": None, "timestamp": m.group(1), "type": "idea",
                 "state": "logged", "done_at": None, "title": m.group(2).strip(),
-                "body": m.group(3).strip(),
+                "body": body(m.group(3)),
                 "priority": None, "due": None, "recur": None}
 
     return None
 
 
-def _entry_text(entry: dict) -> str:
-    body = entry.get("body") or ""
+def _entry_text(entry: dict, prefix: str) -> str:
+    body = _escape_body(entry.get("body") or "", prefix)
     state = entry.get("state") or "logged"
     done_at = entry.get("done_at")
     priority = entry.get("priority")
@@ -213,7 +237,7 @@ def load_entries(entries_file: Path, prefix: str) -> list[dict]:
             assigned.add(entry["id"])
             entry["timestamp"] = _pad_ts(entry["timestamp"])
             entry["done_at"] = _pad_ts(entry["done_at"])
-        body_text = "\n".join(_entry_text(e) for e in entries)
+        body_text = "\n".join(_entry_text(e, prefix) for e in entries)
         _write_atomic(entries_file, preamble.rstrip("\n") + "\n\n" + body_text, backup=True)
         mtime = entries_file.stat().st_mtime
 
@@ -235,7 +259,7 @@ def add_entry(entries_file: Path, prefix: str, project_name: str, title: str, bo
                  "done_at": None, "title": title, "body": body,
                  "priority": priority or None, "due": due or None, "recur": recur or None}
         with open(entries_file, "a", encoding="utf-8") as f:
-            f.write("\n" + _entry_text(entry))
+            f.write("\n" + _entry_text(entry, prefix))
     return entry
 
 
@@ -265,10 +289,17 @@ def update_entry_state(entries_file: Path, prefix: str, entry_id: str,
         if not entry:
             return None, None
         old_state = entry["state"]
-        entry["state"] = new_state
         text = entries_file.read_text(encoding="utf-8", errors="replace")
         # Capture extras (pri:/due:/recur: fields) to preserve them through the state change.
         pattern = rf"(## {re.escape(entry_id)} · [^·]+ · \w+) · \w+(?: · {_TS})?{_EXTRAS_RE} —"
+        # Verify the header actually matches BEFORE mutating the (cached) entry
+        # dict — otherwise a manually mangled header would return success while
+        # the file stays unchanged and cache and disk disagree.
+        if re.search(pattern, text) is None:
+            logger.warning("entrybox: header for %s in %s did not match — state not changed",
+                           entry_id, entries_file)
+            return None, None
+        entry["state"] = new_state
         if new_state == "done":
             done_at = datetime.now().strftime("%Y-%m-%d %H:%M")
             entry["done_at"] = done_at
@@ -311,7 +342,7 @@ def update_entry(entries_file: Path, prefix: str, entry_id: str,
                     parsed["due"] = due if due else None
                 if recur is not None:
                     parsed["recur"] = recur if recur else None
-                blocks[i] = _entry_text(parsed)
+                blocks[i] = _entry_text(parsed, prefix)
                 updated = parsed
                 break
         if updated is None:

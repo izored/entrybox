@@ -1,6 +1,10 @@
 import json
+import logging
 import os
+import shutil
 from pathlib import Path
+
+logger = logging.getLogger("entrybox")
 
 BASE_DIR = Path(__file__).parent.parent
 DATA_DIR = Path(os.getenv("ENTRYBOX_DATA_DIR", str(BASE_DIR / "data")))
@@ -39,12 +43,22 @@ def _load() -> dict:
             data.setdefault(k, v)
         return data
     except Exception:
+        # This file holds every project registration — never silently reset
+        # it without keeping the evidence recoverable.
+        try:
+            snapshot = _STATE_FILE.with_name(_STATE_FILE.name + ".corrupt")
+            shutil.copy2(_STATE_FILE, snapshot)
+            logger.warning("entrybox.json is unreadable — snapshotted to %s and "
+                           "falling back to defaults", snapshot)
+        except OSError:
+            logger.warning("entrybox.json is unreadable and could not be snapshotted")
         return dict(_DEFAULTS)
 
 
 def _save(data: dict) -> None:
+    from app.entries import _write_atomic
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    _STATE_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    _write_atomic(_STATE_FILE, json.dumps(data, indent=2, ensure_ascii=False))
 
 
 def get_state() -> dict:
@@ -52,7 +66,11 @@ def get_state() -> dict:
 
 
 def update_state(patch: dict) -> dict:
-    data = _load()
-    data.update(patch)
-    _save(data)
+    # entrybox.json is read-modify-written by the UI and the CLI concurrently;
+    # the same lock discipline the entries files get.
+    from app.entries import _lock
+    with _lock(_STATE_FILE):
+        data = _load()
+        data.update(patch)
+        _save(data)
     return data

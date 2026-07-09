@@ -19,6 +19,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.5.2] - 2026-07-09
+
+### Fixed
+
+- **Entry bodies containing heading-shaped lines no longer split into phantom
+  entries.** A body line starting with `## YYYY-MM-DD` or `## PREFIX-NNNN`
+  (e.g. pasted meeting notes) matched the block separator on the next load —
+  a phantom entry was fabricated, the original body truncated, and the repair
+  rewrite persisted the damage. Dangerous lines are now backslash-escaped on
+  write and unescaped on read; plain bodies stay byte-identical on disk.
+- **Agent annotation writes can never destroy config-file content.** The
+  managed block in `CLAUDE.md` / `.cursorrules` / etc. is only replaced when
+  exactly one well-formed marker pair exists. Orphaned, duplicated, reversed,
+  or prose-embedded markers previously let a rewrite swallow user lines
+  between markers — now the file is left byte-identical and the UI says why.
+  Legacy (marker-less) block adoption is heading-level aware, so an inner
+  `###` no longer leaves fragments, and a hand-written `## EntryBox` block is
+  now actually adopted as the README always promised.
+- Annotation writes preserve the file's own line endings (a user's LF file no
+  longer comes back CRLF on Windows), refuse to rewrite non-UTF-8 files
+  (previously every non-UTF-8 byte was silently mojibake'd), go through an
+  atomic temp-file replace, and snapshot the previous content to `<file>.bak`.
+- Annotation URLs now use the server's real configured port instead of a
+  hardcoded `3859`.
+- `data/entrybox.json` (all project registrations) is written atomically,
+  guarded by the same file lock the entries files use, and a corrupt state
+  file is snapshotted to `entrybox.json.corrupt` instead of being silently
+  reset to defaults.
+- `update_entry_state` verifies the entry header actually matched before
+  reporting success, so cache and disk can no longer disagree.
+- Theme ids are whitelisted (`[A-Za-z0-9_-]{1,64}`) — a traversal id like
+  `../data/entrybox` could previously read any JSON file via the themes API.
+- Custom-agent `config_file` values must be relative paths inside the project
+  (absolute, drive-prefixed, UNC, and `..` paths are rejected).
+- Project `prefix` (A-Z/digits) and `id` (lowercase slug) are validated at
+  registration — a `·` or `—` inside a prefix would have corrupted the
+  entries-file format.
+- Quick Drop page builds its project dropdown via DOM APIs instead of
+  interpolated `innerHTML`.
+
+### Added
+
+- **New built-in agents:** `AGENTS.md` (the cross-vendor standard read by
+  OpenAI Codex, Kimi, Amp, Jules, Zed and others) and `GEMINI.md` (Gemini
+  CLI).
+- **Edited annotation previews are now honored.** The block you edit in the
+  register modal is what gets written (as long as the EntryBox markers stay
+  intact — otherwise the canonical block is used).
+- `POST /api/agents/preview` — stateless server-side annotation preview. The
+  UI's duplicated JS copy of the block template (which had already drifted
+  from what the server wrote) is gone; the server is the single source of
+  truth.
+- Registration and agent-toggle responses report per-file annotation results
+  (`created` / `replaced` / `adopted` / `appended` / `skipped_broken` /
+  `skipped_unreadable` / `replaced_other`); the UI shows a toast when a file
+  was skipped or when another project's block was replaced (one block per
+  file — relevant when two projects share a root).
+- Project scans report `broken_agent_ids`; the register modal warns that
+  files with damaged markers will not be touched.
+- GitHub Actions CI: the unittest suite runs on Ubuntu + Windows, Python 3.10
+  and 3.13, on every push and pull request.
+- `LICENSE` file (AGPL-3.0 text — the README claimed the license; the file
+  was missing).
+
+### Changed
+
+- Version is now also sourced from `app/__init__.py` (`/health` reports it);
+  release checklist updated to four sync points.
+- Test suite grew from 23 to 67 tests (annotation topology, encoding, line
+  endings, body-escape round-trips, config crash-safety, theme/agent/prefix
+  validation).
+
+---
+
 ## [1.5.1] - 2026-06-04
 
 ### Added

@@ -10,6 +10,7 @@ Lightweight idea, feedback, and fix tracking for any project. Markdown-native, m
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3b9eff?style=flat-square)](https://www.python.org/)
 [![Local-first](https://img.shields.io/badge/local--first-no%20account-6bcb77?style=flat-square)](#security)
 [![Release](https://img.shields.io/badge/release-v1.5.2-6bcb77?style=flat-square)](CHANGELOG.md)
+[![Tests](https://github.com/izored/EntryBox/actions/workflows/tests.yml/badge.svg)](https://github.com/izored/EntryBox/actions/workflows/tests.yml)
 
 </div>
 
@@ -199,6 +200,15 @@ place. It never appends a duplicate.
 | Windsurf | `.windsurfrules` | `# EntryBox` |
 | GitHub Copilot | `.github/copilot-instructions.md` | `<!-- EntryBox -->` |
 | Aider | `.aider.conf.yml` | `# EntryBox` |
+| AGENTS.md standard (Codex, Kimi, Amp, Jules, Zed…) | `AGENTS.md` | `<!-- EntryBox -->` |
+| Gemini CLI | `GEMINI.md` | `<!-- EntryBox -->` |
+
+EntryBox treats your config files as yours: the managed block is only
+replaced when its marker pair is intact. If markers ever end up orphaned,
+duplicated, or out of order (files like `CLAUDE.md` get edited by you *and*
+your agents), EntryBox refuses to touch the file, tells you why, and leaves
+your content byte-for-byte as it was. Every rewrite keeps your file's line
+endings and drops a `<file>.bak` snapshot first.
 
 ### Custom or unknown agents
 

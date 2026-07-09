@@ -81,9 +81,11 @@ assets/         — logo.svg
 When a project is registered with one or more agents, `agents.py` writes a block into that agent's config file (e.g. `CLAUDE.md`, `.cursorrules`). The block is delimited by 
 ` (markdown) or `# EntryBox` / `# /EntryBox` (comment style).
 
-`annotation_status()` returns `"none"`, `"marked"` (managed block present), or `"legacy"` (hand-written EntryBox block without markers). `write_annotation()` handles all three cases without producing duplicates.
+`annotation_status()` returns `"none"`, `"marked"` (one well-formed managed block), `"broken"` (orphaned/duplicated/reversed marker lines — EntryBox will not touch the file), `"legacy"` (hand-written EntryBox block without markers), or `"unreadable"` (not UTF-8). `write_annotation()` returns a status string (`created` / `replaced` / `replaced_other` / `adopted` / `appended` / `skipped_broken` / `skipped_unreadable`) and never rewrites a file whose marker topology is damaged or that fails strict UTF-8 decoding. All rewrites are atomic, preserve the file's own line endings, and snapshot the prior content to `<file>.bak`.
 
-Built-in agents: `claude-code`, `cursor`, `windsurf`, `copilot`, `aider`. Custom agents can be added via the UI or API and are persisted in `entrybox.json` as `learned_agents`.
+The annotation block template lives ONLY in `agents.build_annotation()` — the UI fetches previews from `POST /api/agents/preview` (do not reintroduce a JS copy; the old mirror drifted). User-edited previews are honored at registration when their marker pair is intact.
+
+Built-in agents: `claude-code`, `cursor`, `windsurf`, `copilot`, `aider`, `agents-md` (AGENTS.md — Codex, Kimi & the cross-vendor standard), `gemini-cli` (GEMINI.md). Custom agents can be added via the UI or API and are persisted in `entrybox.json` as `learned_agents`.
 
 ```markdown
 <!-- EntryBox -->

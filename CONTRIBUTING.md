@@ -14,7 +14,7 @@ By contributing you agree your work is licensed under the project's
 EntryBox needs Python 3.10 or newer.
 
 ```bash
-git clone https://github.com/izored/EntryBox.git
+git clone https://github.com/izored/entrybox.git
 cd entrybox
 python -m venv .venv
 # Windows: .venv\Scripts\activate    macOS/Linux: source .venv/bin/activate

@@ -417,4 +417,4 @@ First public release.
 
 ---
 
-[1.0.0]: https://github.com/izored/EntryBox/releases/tag/v1.0.0
+[1.0.0]: https://github.com/izored/entrybox/releases/tag/v1.0.0

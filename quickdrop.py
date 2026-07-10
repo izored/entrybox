@@ -13,6 +13,7 @@ Run it:  quickdrop.bat
 """
 import os
 import json
+import sys
 import threading
 import subprocess
 import urllib.request
@@ -251,8 +252,15 @@ class QuickDrop:
 
     def start_server(self):
         try:
-            subprocess.Popen('start "EntryBox Server" cmd /k run.bat',
-                             cwd=str(HERE), shell=True)
+            if sys.platform == "win32":
+                subprocess.Popen('start "EntryBox Server" cmd /k run.bat',
+                                 cwd=str(HERE), shell=True)
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", "-a", "Terminal", str(HERE / "run.sh")])
+            else:
+                subprocess.Popen(["bash", str(HERE / "run.sh")], cwd=str(HERE),
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                 start_new_session=True)
         except Exception as e:
             self.set_status(f"Launch failed: {e}", ERR)
             return

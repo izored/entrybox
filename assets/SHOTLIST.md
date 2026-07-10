@@ -29,7 +29,7 @@ Save each as PNG in this folder with the exact filename given.
 | Filename | Size (px) | Notes |
 |----------|-----------|-------|
 | `social-preview.png` | 1280×640 | GitHub social preview / OG image. Logo + tagline "The idea board that lives in your repo." on the dark background `#0f1117`. Set under repo Settings → Social preview. |
-| `favicon.png` | 512×512 | Square mark only (the diamond from `logo.svg`), centered. Export down to 32×32 as needed. |
+| `favicon.png` | 512×512 | Square mark only (the diamond from `logo.svg`), centered. Export down to 32×32 as needed. **Interim version shipped 2026-07-10** (generated tray-and-arrow glyph in brand colors, plus `entrybox.ico` for the Windows shortcut); replace both when the real diamond mark is derived. |
 | `logo-mark.svg` | n/a | Optional: the diamond mark alone, no wordmark, for square contexts. Derive from `logo.svg`. |
 
 ## Optional

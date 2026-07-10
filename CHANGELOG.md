@@ -11,6 +11,39 @@ Planned work lives in [ROADMAP.md](ROADMAP.md). This file is history only.
 
 ---
 
+## [1.5.3] - 2026-07-10
+
+### Added
+
+- **Pin EntryBox like an app on all three desktops.** New `scripts/` folder
+  with one installer per OS, each creating a launcher that health-checks the
+  server, starts it quietly if it is down, and opens EntryBox as a chromeless
+  app window (Chrome / Edge / Chromium `--app` mode) with its own icon:
+  - Windows: `scripts\windows\install-shortcut.ps1` creates Start Menu and
+    Desktop shortcuts (pin to taskbar from the Start menu; Windows does not
+    allow scripts to pin).
+  - macOS: `scripts/macos/install-dock-app.sh` builds
+    `~/Applications/EntryBox.app` (icon included via `sips`/`iconutil`);
+    `--pin` also pins it to the Dock.
+  - Linux: `scripts/linux/install-desktop-entry.sh` adds an app-menu entry
+    with icon.
+- Interim brand icon: `assets/favicon.png` (512 px) and `assets/entrybox.ico`
+  (multi-size), generated tray-and-arrow glyph in the brand colors. Both
+  pages now use it as favicon, so pinned app windows carry the EntryBox icon.
+  Replace when the real diamond mark is derived from `logo.svg` (tracked in
+  `assets/SHOTLIST.md`).
+- CI now also runs the full test suite on macOS (`macos-latest`), alongside
+  Ubuntu and Windows, on Python 3.10 and 3.13.
+
+### Fixed
+
+- `run.sh` ships with its executable bit set. Cloning on macOS or Linux and
+  running `./run.sh` per the README used to fail with "Permission denied".
+- Quick Drop's "Start server" button now works on macOS (opens Terminal with
+  `run.sh`) and Linux (spawns `run.sh` detached); it was Windows-only.
+
+---
+
 ## [1.5.2] - 2026-07-09
 
 ### Fixed

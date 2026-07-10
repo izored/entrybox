@@ -9,7 +9,7 @@ Lightweight idea, feedback, and fix tracking for any project. Markdown-native. M
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL%20v3-3b9eff?style=flat-square)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3b9eff?style=flat-square)](https://www.python.org/)
 [![Local-first](https://img.shields.io/badge/local--first-no%20account-6bcb77?style=flat-square)](#security)
-[![Release](https://img.shields.io/badge/release-v1.5.2-6bcb77?style=flat-square)](CHANGELOG.md)
+[![Release](https://img.shields.io/badge/release-v1.5.3-6bcb77?style=flat-square)](CHANGELOG.md)
 [![Tests](https://github.com/izored/entrybox/actions/workflows/tests.yml/badge.svg)](https://github.com/izored/entrybox/actions/workflows/tests.yml)
 
 </div>
@@ -91,6 +91,35 @@ quickdrop.bat        # opens the Quick Drop window
 It's a native Tkinter window (stdlib only, no extra dependencies) and talks to the same local server. If the server isn't running, the window shows a **Start server** button that launches `run.bat` for you. Pin `quickdrop.bat` to your taskbar or make a desktop shortcut for one-click access.
 
 Full design, architecture, and rebuild notes: [docs/QUICKDROP.md](docs/QUICKDROP.md).
+
+### Pin it like an app (taskbar / Dock / app menu)
+
+EntryBox stays a browser UI on purpose: no Electron, no installers, nothing to sign. The app feel comes from your browser's app mode plus a launcher that starts the server when it's down. One script per OS:
+
+**Windows** (PowerShell, from the repo folder):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\windows\install-shortcut.ps1
+```
+
+Creates Start Menu and Desktop shortcuts with the EntryBox icon. Then open the Start menu, right-click EntryBox, **Pin to taskbar** (Windows doesn't let scripts do that part).
+
+**macOS:**
+
+```bash
+bash scripts/macos/install-dock-app.sh          # builds ~/Applications/EntryBox.app
+bash scripts/macos/install-dock-app.sh --pin    # same, plus pins it to the Dock
+```
+
+**Linux:**
+
+```bash
+bash scripts/linux/install-desktop-entry.sh
+```
+
+Adds EntryBox to your app menu; pin to the taskbar or favorites from there.
+
+Every launcher does the same thing: check `/health`, start the server quietly if needed, then open `http://localhost:3859` as a chromeless app window (Chrome, Edge, or Chromium) with its own icon. No Chromium browser? You get a normal tab instead.
 
 ---
 
@@ -362,7 +391,7 @@ If EntryBox is not running when the parent app loads, a raw `<iframe>` shows a b
 
 ```
 GET http://localhost:3859/health
-→ 200  { "status": "ok", "version": "1.5.2" }
+→ 200  { "status": "ok", "version": "1.5.3" }
 ```
 
 **Alpine.js pattern** (drop into any Alpine component):

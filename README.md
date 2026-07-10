@@ -487,7 +487,7 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 ## Roadmap
 
-v1.0 shipped the full core described above. Next: a file-tree UI, a search / filter bar, a Chrome extension, richer webhooks, and a community themes gallery. See the **Unreleased / Planned** section of [CHANGELOG.md](CHANGELOG.md) for the live queue.
+v1.0 shipped the full core described above. Next up: a file-tree browser, a search / filter bar, a Chrome extension, richer webhooks, and a community themes gallery. The full plan, with what won't change no matter what, lives in [ROADMAP.md](ROADMAP.md).
 
 ---
 
@@ -519,7 +519,11 @@ EntryBox is free and AGPL-licensed. If it saves you time and you want to help it
 
 ## License
 
-[GNU AGPL-3.0](LICENSE). You may use, modify, and redistribute EntryBox freely. If you run a modified version as a network service, you must make your modified source available to its users.
+EntryBox is free software under the [GNU AGPL-3.0](LICENSE). In plain words:
+
+- **Use it, modify it, redistribute it.** Free forever, for anyone.
+- **It stays free.** If you distribute a copy or a modified version, or run one as a network service, it must remain under this license, with its source available to its users.
+- **Keep the credit.** Distributed or modified versions must preserve the attribution "Based on EntryBox by Reda Izo (dev.izo.red)" somewhere its users can see. Full terms in [NOTICE](NOTICE) (GNU AGPL v3, section 7(b)).
 
 ---
 

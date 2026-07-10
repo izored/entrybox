@@ -7,15 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## Unreleased / Planned
-
-- **N6** file-tree UI + file-scoped entries (backend already built in v1.5.0)
-- **N4** Chrome extension (MV3: popup, context-menu, screenshot→attachment)
-- **N5** companion app + quick.html refresh (paste attach, undo, capture-contract parity)
-- **N2** per-project custom types + broadened positioning / copy
-- **P3** search / filter bar
-- **P4** resurfacing / snooze (stale-badge + saved filter)
-- **P6** resolution link on done (commit / PR / file ref)
+Planned work lives in [ROADMAP.md](ROADMAP.md). This file is history only.
 
 ---
 
@@ -25,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Entry bodies containing heading-shaped lines no longer split into phantom
   entries.** A body line starting with `## YYYY-MM-DD` or `## PREFIX-NNNN`
-  (e.g. pasted meeting notes) matched the block separator on the next load —
+  (e.g. pasted meeting notes) matched the block separator on the next load:
   a phantom entry was fabricated, the original body truncated, and the repair
   rewrite persisted the damage. Dangerous lines are now backslash-escaped on
   write and unescaped on read; plain bodies stay byte-identical on disk.
@@ -33,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   managed block in `CLAUDE.md` / `.cursorrules` / etc. is only replaced when
   exactly one well-formed marker pair exists. Orphaned, duplicated, reversed,
   or prose-embedded markers previously let a rewrite swallow user lines
-  between markers — now the file is left byte-identical and the UI says why.
+  between markers. Now the file is left byte-identical and the UI says why.
   Legacy (marker-less) block adoption is heading-level aware, so an inner
   `###` no longer leaves fragments, and a hand-written `## EntryBox` block is
   now actually adopted as the README always promised.
@@ -49,12 +41,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reset to defaults.
 - `update_entry_state` verifies the entry header actually matched before
   reporting success, so cache and disk can no longer disagree.
-- Theme ids are whitelisted (`[A-Za-z0-9_-]{1,64}`) — a traversal id like
+- Theme ids are whitelisted (`[A-Za-z0-9_-]{1,64}`): a traversal id like
   `../data/entrybox` could previously read any JSON file via the themes API.
 - Custom-agent `config_file` values must be relative paths inside the project
   (absolute, drive-prefixed, UNC, and `..` paths are rejected).
 - Project `prefix` (A-Z/digits) and `id` (lowercase slug) are validated at
-  registration — a `·` or `—` inside a prefix would have corrupted the
+  registration, because a `·` or `—` inside a prefix would have corrupted the
   entries-file format.
 - Quick Drop page builds its project dropdown via DOM APIs instead of
   interpolated `innerHTML`.
@@ -66,8 +58,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   CLI).
 - **Edited annotation previews are now honored.** The block you edit in the
   register modal is what gets written (as long as the EntryBox markers stay
-  intact — otherwise the canonical block is used).
-- `POST /api/agents/preview` — stateless server-side annotation preview. The
+  intact; otherwise the canonical block is used).
+- `POST /api/agents/preview`: stateless server-side annotation preview. The
   UI's duplicated JS copy of the block template (which had already drifted
   from what the server wrote) is gone; the server is the single source of
   truth.
@@ -75,12 +67,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`created` / `replaced` / `adopted` / `appended` / `skipped_broken` /
   `skipped_unreadable` / `replaced_other`); the UI shows a toast when a file
   was skipped or when another project's block was replaced (one block per
-  file — relevant when two projects share a root).
+  file, relevant when two projects share a root).
 - Project scans report `broken_agent_ids`; the register modal warns that
   files with damaged markers will not be touched.
 - GitHub Actions CI: the unittest suite runs on Ubuntu + Windows, Python 3.10
   and 3.13, on every push and pull request.
-- `LICENSE` file (AGPL-3.0 text — the README claimed the license; the file
+- `LICENSE` file (AGPL-3.0 text; the README claimed the license but the file
   was missing).
 
 ### Changed

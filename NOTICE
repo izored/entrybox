@@ -1,5 +1,5 @@
 EntryBox
-Copyright (c) 2026 Reda Izo (izored), DIR / dev.izo.red <dev@izo.red>
+Copyright (c) 2026 DIR (dev.izo.red) <dev@izo.red>
 
 This program is licensed under the GNU Affero General Public License,
 version 3 (AGPL-3.0). See the LICENSE file for the full text.
@@ -12,7 +12,7 @@ or make available to users as a network service, must preserve the
 following author attribution in a place reasonably visible to its users
 (for example the README, an About screen, or the documentation):
 
-    Based on EntryBox by Reda Izo (dev.izo.red)
+    Based on EntryBox by DIR (dev.izo.red)
 
 Removing or obscuring this attribution in distributed or modified versions
 is not permitted. This requirement does not restrict the freedoms granted

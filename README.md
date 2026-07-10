@@ -4,7 +4,7 @@
 
 **The idea board that lives in your repo.**
 
-Lightweight idea, feedback, and fix tracking for any project. Markdown-native, multi-project, agent-aware, no SaaS.
+Lightweight idea, feedback, and fix tracking for any project. Markdown-native. Multi-project. Agent-aware. No SaaS.
 
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL%20v3-3b9eff?style=flat-square)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3b9eff?style=flat-square)](https://www.python.org/)
@@ -523,12 +523,12 @@ EntryBox is free software under the [GNU AGPL-3.0](LICENSE). In plain words:
 
 - **Use it, modify it, redistribute it.** Free forever, for anyone.
 - **It stays free.** If you distribute a copy or a modified version, or run one as a network service, it must remain under this license, with its source available to its users.
-- **Keep the credit.** Distributed or modified versions must preserve the attribution "Based on EntryBox by Reda Izo (dev.izo.red)" somewhere its users can see. Full terms in [NOTICE](NOTICE) (GNU AGPL v3, section 7(b)).
+- **Keep the credit.** Distributed or modified versions must preserve the attribution "Based on EntryBox by DIR (dev.izo.red)" somewhere its users can see. Full terms in [NOTICE](NOTICE) (GNU AGPL v3, section 7(b)).
 
 ---
 
 ## Credits
 
-Built by **Reda Izo** under **DIR (dev.izo.red)**, the developer identity behind the creative studio izo.red. Born from a growing obsession with building software alongside AI coding agents.
+Built by **DIR (dev.izo.red)**, the developer identity behind the creative studio izo.red. Born from a growing obsession with building software alongside AI coding agents.
 
 Contact: **dev@izo.red**

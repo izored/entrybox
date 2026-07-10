@@ -1,7 +1,7 @@
 # EntryBox roadmap
 
-Where EntryBox is going. The order can shift, the promises can't:
-**local-first, no SaaS, no account, no database.** Entries stay in
+Where EntryBox is going. The order can shift. The promises can't:
+**local-first. No SaaS. No account. No database.** Entries stay in
 `.entrybox/entries.md` inside each project, as plain markdown your AI agent
 can read.
 

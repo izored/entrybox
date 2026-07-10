@@ -58,5 +58,7 @@ v1.0 shipped the core (server, markdown storage, 5 types, 5 states,
 multi-project, agent annotation, themes, onboarding, embed mode, REST, CLI,
 webhooks). Since then: pagination, rich entry rendering, the Quick Drop
 desktop window, attachments, priority/due/recurrence fields, syntax
-highlighting, vendored offline assets, and the v1.5.2 hardening pass
-(crash-safe writes, annotation marker safety, CI).
+highlighting, vendored offline assets, the v1.5.2 hardening pass
+(crash-safe writes, annotation marker safety, CI), and v1.5.3: pin EntryBox
+like an app on Windows, macOS, and Linux, with the test suite running on
+all three OSes in CI.

@@ -5,7 +5,9 @@ built that way, and what to do if you ever rebuild it as a "real" app. Written s
 a future version (or a from-scratch rewrite) starts with full context and doesn't
 repeat the mistakes we already hit.
 
-Status: shipped in **v1.3.0** (2026-05-29). Windows-only today.
+Status: shipped in **v1.3.0** (2026-05-29). Since **v1.5.3** (2026-07-10) the
+"Start server" path works on macOS and Linux too; the `quickdrop.bat` launcher
+itself is still Windows (run `python3 quickdrop.py` elsewhere).
 
 ---
 
@@ -135,9 +137,10 @@ theme CSS, and there's no tray/hotkey. Worth it for reliability.
 
 ## 5. Known limitations (current build)
 
-- **Windows-only.** Uses `run.bat`, `cmd /k`, `pythonw.exe`, and a Windows
-  `.lnk`. Tkinter itself is cross-platform; the launcher + server-start path are
-  not.
+- **Launcher is Windows-only.** `quickdrop.bat` uses `pythonw.exe` and a
+  Windows `.lnk`. The window itself and the Start-server button are
+  cross-platform since v1.5.3 (macOS opens Terminal with `run.sh`; Linux
+  spawns it detached). macOS/Linux users run `python3 quickdrop.py`.
 - **No single-instance guard.** Launching twice opens two windows. (A prior
   socket-bind guard was removed with the rewrite; re-add if it matters.)
 - **No global hotkey / no tray.** Intentional, but it means the window isn't
@@ -146,7 +149,10 @@ theme CSS, and there's no tray/hotkey. Worth it for reliability.
   the full UI.
 - **Start-server polling is best-effort** (40 s) and the spawned server console is
   a separate window the user must not close.
-- **Shortcut has the generic Python icon** (no `.ico` generated yet).
+- ~~Shortcut has the generic Python icon~~ Fixed in v1.5.3:
+  `assets/entrybox.ico` exists and `scripts/windows/install-shortcut.ps1` uses
+  it (that shortcut launches the main app, not Quick Drop; a Quick Drop `.lnk`
+  can point at the same icon).
 
 ---
 
@@ -157,8 +163,9 @@ Pick the path by how much you want to invest. All of these keep the same contrac
 
 ### Option A — polish the Tkinter app (cheap, stays stdlib)
 - Add a single-instance guard (bind a localhost socket; if taken, exit or focus).
-- Generate a real window/taskbar icon from `assets/logo.svg` → `.ico` (one-time,
-  e.g. via Pillow in a build step, not a runtime dep).
+- ~~Generate a real window/taskbar icon~~ Done in v1.5.3: interim
+  `assets/entrybox.ico` + `assets/favicon.png` (replace when the diamond mark
+  is derived, see `assets/SHOTLIST.md`).
 - Cross-platform launchers: `quickdrop.sh` + a `.desktop` entry (Linux) / `.app`
   wrapper (macOS); replace `run.bat` calls with the existing `run.sh`.
 - Optional global hotkey **only for local (non-RDP) use** — and make it OS-level

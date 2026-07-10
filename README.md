@@ -88,7 +88,7 @@ For dropping entries without opening the full UI, run `quickdrop.bat` (Windows).
 quickdrop.bat        # opens the Quick Drop window
 ```
 
-It's a native Tkinter window (stdlib only, no extra dependencies) and talks to the same local server. If the server isn't running, the window shows a **Start server** button that launches `run.bat` for you. Pin `quickdrop.bat` to your taskbar or make a desktop shortcut for one-click access.
+It's a native Tkinter window (stdlib only, no extra dependencies) and talks to the same local server. On macOS and Linux, run `python3 quickdrop.py` instead. If the server isn't running, the window shows a **Start server** button that launches it for you on any OS.
 
 Full design, architecture, and rebuild notes: [docs/QUICKDROP.md](docs/QUICKDROP.md).
 
@@ -119,7 +119,7 @@ bash scripts/linux/install-desktop-entry.sh
 
 Adds EntryBox to your app menu; pin to the taskbar or favorites from there.
 
-Every launcher does the same thing: check `/health`, start the server quietly if needed, then open `http://localhost:3859` as a chromeless app window (Chrome, Edge, or Chromium) with its own icon. No Chromium browser? You get a normal tab instead.
+Every launcher does the same thing: check `/health`, start the server quietly if needed, then open `http://localhost:3859` as a chromeless app window (Chrome, Edge, or Chromium) with its own icon. No Chromium browser? You get a normal tab instead. The long version with troubleshooting: [docs/PIN-TO-DESKTOP.md](docs/PIN-TO-DESKTOP.md).
 
 ---
 

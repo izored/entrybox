@@ -33,6 +33,18 @@ Copy `.env.example` to `.env`. Key vars:
 | `ENTRYBOX_MAX_UPLOAD_MB` | `25` | Max attachment size (MB), upload + serving |
 | `ENTRYBOX_TOKEN` | _(none)_ | Shared secret gating file/tree/attachment routes |
 
+## Tests & CI
+
+```bash
+python -m unittest discover -s tests -v   # from the repo root; 69 tests
+```
+
+Stdlib unittest only, no pytest. CI (`.github/workflows/tests.yml`) runs the
+suite on Ubuntu, Windows, and macOS, Python 3.10 and 3.13, on every push and
+PR. The symlink sandbox test self-skips where symlinks need elevation. UI
+behavior is still verified manually in the browser — there is no frontend
+test rig by design.
+
 ## Architecture
 
 EntryBox is a local-only FastAPI SPA. No database — all state lives in flat files.
@@ -72,8 +84,15 @@ themes/         — *.json theme files (name, author, vars dict of CSS custom pr
 cli/            — entrybox.py (stdlib-only CLI; talks to the REST API)
 quickdrop.py    — native Tkinter quick-entry window (stdlib only); posts to the REST API
 quickdrop.bat   — launcher: runs quickdrop.py via pythonw (uses .venv python if present)
+scripts/        — per-OS "pin like an app" launchers: windows/ (.vbs launcher + .ps1
+                  shortcut installer), macos/ (Dock-app builder, --pin option),
+                  linux/ (.desktop entry). Contract: health-check, start server if
+                  down, open browser --app window. NEVER start the server with
+                  pythonw — uvicorn dies without stdio; use python.exe hidden.
 docs/QUICKDROP.md — Quick Drop design, architecture, attempt history & rebuild notes
-assets/         — logo.svg
+docs/PIN-TO-DESKTOP.md — per-OS pin/launcher how-to with troubleshooting
+assets/         — logo.svg (wordmark, source of truth) + interim favicon.png /
+                  entrybox.ico (generated glyph; replace per SHOTLIST.md)
 ```
 
 ### Agent annotation system

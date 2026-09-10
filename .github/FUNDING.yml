@@ -1,9 +1,4 @@
-# EntryBox funding configuration.
-#
-# TODO: a donation / sponsorship method is not finalized yet.
-# Uncomment and fill the relevant line once a platform is chosen, then this
-# panel appears as a "Sponsor" button on the GitHub repo.
-#
-# github: [izored]
-# ko_fi: <username>
-# custom: ["https://dev.izo.red"]
+# openMemo, entrybox, stillframe and the rest are free and open source, built
+# by one person. These are the two ways anyone can support that.
+github: [izored]
+buy_me_a_coffee: izored

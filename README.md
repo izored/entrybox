@@ -11,6 +11,7 @@ Lightweight idea, feedback, and fix tracking for any project. Markdown-native. M
 [![Local-first](https://img.shields.io/badge/local--first-no%20account-6bcb77?style=flat-square)](#security)
 [![Release](https://img.shields.io/badge/release-v1.5.3-6bcb77?style=flat-square)](CHANGELOG.md)
 [![Tests](https://github.com/izored/entrybox/actions/workflows/tests.yml/badge.svg)](https://github.com/izored/entrybox/actions/workflows/tests.yml)
+[![Sponsor](https://img.shields.io/badge/sponsor-%E2%9D%A4-db61a2?logo=githubsponsors&logoColor=white&style=flat-square)](https://github.com/sponsors/izored) [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-ffdd00?logo=buymeacoffee&logoColor=black&style=flat-square)](https://buymeacoffee.com/izored)
 
 </div>
 
